@@ -13,7 +13,7 @@
   .card h2{font-size:13px;margin:0;color:var(--mut);font-weight:600;display:flex;justify-content:space-between}
   .big{font-size:28px;font-weight:700;margin:2px 0}
   .stats{color:var(--mut);font-size:12px;line-height:1.5;margin-top:6px}
-  canvas{width:100%;height:90px;display:block}
+  canvas{width:100%;height:120px;display:block}
   .warn{color:var(--pow)}
   .layout main{min-width:0}
   .layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;align-items:start}
@@ -108,16 +108,23 @@ const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim
 function draw(c,hist){
   const cv=document.getElementById(c.id+'-c'),r=devicePixelRatio||1;
   cv.width=cv.clientWidth*r;cv.height=cv.clientHeight*r;const x=cv.getContext('2d');x.scale(r,r);
-  const w=cv.clientWidth,h=cv.clientHeight,vals=hist.map(s=>{try{return c.val(s)}catch(e){return null}});
+  const W=cv.clientWidth,H=cv.clientHeight,L=40,B=16,w=W-L,h=H-B,vals=hist.map(s=>{try{return c.val(s)}catch(e){return null}});
   const nums=vals.filter(v=>v!=null);const max=c.max||Math.max(10,...nums)*1.15;
-  x.strokeStyle=css('--grid');x.lineWidth=1;
-  for(let i=0;i<=4;i++){const y=h*i/4;x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke()}
+  const unit=c.fmt(1).replace(/^[\d.]+\s*/,'');
+  x.font='10px sans-serif';x.fillStyle=css('--mut');x.textBaseline='middle';x.textAlign='right';
+  for(let i=0;i<=4;i++){const y=h*i/4;x.strokeStyle=css('--grid');x.lineWidth=1;x.beginPath();x.moveTo(L,y);x.lineTo(W,y);x.stroke();
+    x.fillText((max*(4-i)/4).toFixed(max<20?1:0),L-4,Math.min(Math.max(y,6),h-2))}
+  x.textAlign='left';x.fillText(unit,2,h+8);
+  const t1=hist.length?hist[hist.length-1].ts:0,t0=hist.length?hist[0].ts:0,span=t1-t0;
+  const fmtT=t=>{const d=new Date(t*1000);return span>86400?d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:span<600?'2-digit':undefined})};
+  x.textBaseline='alphabetic';
+  if(span>0)for(let i=0;i<=3;i++){x.textAlign=i==0?'left':i==3?'right':'center';x.fillText(fmtT(t0+span*i/3),L+w*i/3,H-3)}
   if(!nums.length)return;
-  const N=Math.max(hist.length,WIN&&WIN<=900?WIN:2),px=i=>w-(hist.length-1-i)*w/(N-1),py=v=>h-(v/max)*(h-2)-1;
+  const N=Math.max(hist.length,WIN&&WIN<=900?WIN:2),px=i=>L+w-(hist.length-1-i)*w/(N-1),py=v=>h-(v/max)*(h-2)-1;
   x.beginPath();let started=false;
   vals.forEach((v,i)=>{if(v==null)return;started?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v));started=true});
   x.strokeStyle=css(c.color);x.lineWidth=1.6;x.stroke();
-  x.lineTo(w,h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
+  x.lineTo(L+w,h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
 }
 let WIN=60,SPAN=86400; // window length (s); history span (s)
 const fmtDur=t=>t<3600?Math.round(t/60)+' min':t<86400?(t/3600).toFixed(t%3600?1:0)+' h':(t/86400).toFixed(t%86400?1:0)+' days';
