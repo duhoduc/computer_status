@@ -47,7 +47,8 @@
   <label>Sample interval to SQLite (seconds)</label><input id="s-interval" type="number" min="1" max="3600">
   <label>Retention (days)</label><input id="s-retention" type="number" min="1" max="3650">
   <h3>Graph window</h3>
-  <label>Show last <b id="w-lbl"></b></label><input id="w-range" type="range" min="0" max="100" value="0">
+  <label>Show last</label>
+  <div style="display:flex;gap:6px"><input id="w-num" type="number" min="1" step="any" value="1"><select id="w-unit" style="padding:6px;border:1px solid var(--grid);border-radius:6px;background:var(--bg);color:var(--fg)"><option value="60">minutes</option><option value="3600">hours</option><option value="86400">days</option><option value="0">whole history</option></select></div>
   <div class="stats" id="w-info"></div>
   <h3>Power model (estimate)</h3>
   <label>CPU idle (W)</label><input id="s-idle" type="number" min="0">
@@ -127,13 +128,12 @@ function draw(c,hist){
   x.lineTo(L+w,h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
 }
 let WIN=60,SPAN=86400; // window length (s); history span (s)
-const fmtDur=t=>t<3600?Math.round(t/60)+' min':t<86400?(t/3600).toFixed(t%3600?1:0)+' h':(t/86400).toFixed(t%86400?1:0)+' days';
-const wFromPos=p=>p>=100?0:Math.round(60*Math.pow(Math.max(SPAN,120)/60,p/100)); // log scale 60s..SPAN, 0 = all
-function wLabel(){const l=document.getElementById('w-lbl');l.textContent=WIN?fmtDur(WIN):'whole history ('+fmtDur(SPAN)+')'}
-const wr=document.getElementById('w-range');
+const wn=document.getElementById('w-num'),wu=document.getElementById('w-unit');
+function wLabel(){const all=wu.value==='0';wn.disabled=all;document.getElementById('w-info').textContent=all?`whole history (${(SPAN/86400).toFixed(1)} days)`:'min 1 minute, max whole history'}
+function wApply(){const all=wu.value==='0';WIN=all?0:Math.max(60,Math.round((+wn.value||1)*+wu.value));wLabel();try{localStorage.w_cfg=JSON.stringify([wn.value,wu.value])}catch(e){}tick()}
+wn.oninput=wu.onchange=wApply;
+try{const c=JSON.parse(localStorage.w_cfg);wn.value=c[0];wu.value=c[1];WIN=wu.value==='0'?0:Math.max(60,Math.round(+wn.value*+wu.value))}catch(e){}
 wLabel();
-wr.oninput=()=>{WIN=wFromPos(+wr.value);wLabel();try{localStorage.w_pos=wr.value}catch(e){}tick()};
-try{if(localStorage.w_pos!=null){wr.value=localStorage.w_pos;WIN=wFromPos(+wr.value)}}catch(e){}
 function nest(r){return {ts:r.ts,cpu:{util_percent:r.cpu_percent,temp_c:r.cpu_temp_c},memory:{percent:r.ram_percent},
   gpu:{util_percent:r.gpu_percent,temp_c:r.gpu_temp_c},power:{total_w_est:r.power_total_w_est},
   disk:{active_percent:r.disk_active_percent},network:{recv_mbps:r.net_recv_mbps,sent_mbps:r.net_sent_mbps}}}
