@@ -20,7 +20,9 @@ try { [Console]::TreatControlCAsInput = $true } catch {}
 Set-Location $Base
 while ($true) {
     Write-Log 'Starting server.js'
-    & (Join-Path $Base 'node\node.exe') (Join-Path $Base 'server.js') *>> $Log
+    $Node = Join-Path $Base 'node\node.exe'   # portable Node if present, else the system one
+    if (-not (Test-Path $Node)) { $Node = (Get-Command node -ErrorAction SilentlyContinue).Source }
+    & $Node (Join-Path $Base 'server.js') *>> $Log
     Write-Log "server.js exited with code $LASTEXITCODE; restarting in 5s"
     Start-Sleep -Seconds 5
 }
