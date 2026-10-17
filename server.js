@@ -10,6 +10,10 @@ const HEADLESS = readHeadless();   // true = no window, false = Chrome window vi
 const APP = 'http://localhost:8765';
 const PORT = 3000;       // clients connect to ws://<tailscale-ip>:PORT/
 const WS_PATH = '/';      // must match the client URL path exactly (query string is ignored)
+const CDP_PORT = 9223;    // localhost-only debug port, used by the tab janitor below
+const JANITOR_IDLE_MIN = 15;     // close tabs with no navigation/network/console activity for this long
+const JANITOR_MAX_TABS = 20;     // hard cap: beyond this, the least recently active tabs are closed
+const JANITOR_EVERY_SEC = 60;    // sweep interval
 // ========================================================
 
 const path = require('path');
@@ -52,6 +56,7 @@ async function waitForTailscaleIp() {
     port: PORT,
     wsPath: WS_PATH,
     handleSIGINT: false,  // a stray Ctrl+C on the hidden console must not stop the server
+    args: [`--remote-debugging-port=${CDP_PORT}`, '--remote-debugging-address=127.0.0.1'],
   });
   log(`Chrome ready (headless=${HEADLESS}) at ${server.wsEndpoint()}`);
 
@@ -69,6 +74,52 @@ async function waitForTailscaleIp() {
   }).catch(() => {});
   beat();
   setInterval(beat, 5000);
+
+  // Tab janitor: closes leaked/idle tabs (and empty contexts) so Chromium memory doesn't grow forever.
+  // Attaches over CDP to see every client's tabs; "activity" = navigation, request or console output.
+  const lastActive = new WeakMap();
+  const touch = p => lastActive.set(p, Date.now());
+  const watched = new WeakSet();
+  const watch = p => {
+    if (watched.has(p)) return;
+    watched.add(p); touch(p);
+    for (const ev of ['framenavigated', 'request', 'console', 'load', 'dialog']) p.on(ev, () => touch(p));
+  };
+  const ctxSeen = new WeakSet();
+  let cdp = null;
+  const sweep = async () => {
+    try {
+      if (!cdp || !cdp.isConnected()) {
+        cdp = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
+        cdp.on('disconnected', () => { cdp = null; });
+      }
+      const now = Date.now();
+      const alive = [];
+      for (const ctx of cdp.contexts()) {
+        if (!ctxSeen.has(ctx)) { ctxSeen.add(ctx); ctx.on('page', watch); }
+        for (const p of ctx.pages()) {
+          watch(p);
+          if (p.isClosed()) continue;
+          const idle = now - (lastActive.get(p) || now);
+          if (idle > JANITOR_IDLE_MIN * 60000) {
+            log(`janitor: closing idle tab (${Math.round(idle / 60000)} min) ${p.url().slice(0, 80)}`);
+            await p.close({ runBeforeUnload: false }).catch(() => {});
+          } else alive.push(p);
+        }
+      }
+      if (alive.length > JANITOR_MAX_TABS) {
+        alive.sort((a, b) => (lastActive.get(a) || 0) - (lastActive.get(b) || 0));
+        for (const p of alive.slice(0, alive.length - JANITOR_MAX_TABS)) {
+          log(`janitor: closing tab over cap (${JANITOR_MAX_TABS}) ${p.url().slice(0, 80)}`);
+          await p.close({ runBeforeUnload: false }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      cdp = null;
+      log(`janitor: sweep failed: ${e.message.split('\n')[0]}`);
+    }
+  };
+  setInterval(sweep, JANITOR_EVERY_SEC * 1000);
 
   // Dashboard toggle changed browser_headless -> exit so start-server.ps1 restarts us with the new mode.
   require('fs').watchFile(SETTINGS, { interval: 2000 }, async () => {
