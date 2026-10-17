@@ -1,4 +1,4 @@
-# Live Task-Manager-style collector: samples every ~1s and POSTs to the container (/api/live).
+﻿# Live Task-Manager-style collector: samples every ~1s and POSTs to the container (/api/live).
 param([string]$Url = "http://localhost:8765/api/live")
 
 $os = Get-CimInstance Win32_OperatingSystem
@@ -35,14 +35,17 @@ function Get-Gpu {
      clock_mhz = (& $n $p[7]); fan_percent = (& $n $p[8]) }
 }
 
+function Find-CpuTemps($n, $acc) {
+  # Collect CPU-package style temperature readings from the LibreHardwareMonitor tree (degree sign avoided on purpose).
+  if ($n.Text -match 'Core \(Tctl|Package|Tdie|Tctl' -and $n.Value -match '^([\d.,]+)\s*\S{1,2}C$') { $acc.Add([double]($Matches[1] -replace ',', '.')) | Out-Null }  # value match last: it sets $Matches
+  foreach ($c in $n.Children) { Find-CpuTemps $c $acc }
+}
 function Get-CpuTemp {
   # Needs LibreHardwareMonitor (or OpenHardwareMonitor) running with "Remote Web Server" on :8085.
   try {
     $j = Invoke-RestMethod "http://localhost:8085/data.json" -TimeoutSec 1
-    $found = @()
-    $walk = { param($n) if ($n.Value -match '^([\d.,]+) °C' -and $n.Text -match 'Core \(Tctl|Package|CPU|Tdie|Tctl') { $found += [double]($Matches[1] -replace ',', '.') }
-              foreach ($c in $n.Children) { & $walk $c } }
-    & $walk $j
+    $found = New-Object System.Collections.ArrayList
+    Find-CpuTemps $j $found
     if ($found.Count) { return ($found | Measure-Object -Maximum).Maximum }
   } catch {}
   return $null
