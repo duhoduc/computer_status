@@ -1,5 +1,5 @@
 """Computer status store: SQLite + tiny HTTP API + dashboard. Standard library only."""
-import collections, json, os, sqlite3, threading, time, shutil
+import collections, json, logging, logging.handlers, os, sqlite3, threading, time, shutil
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -10,6 +10,16 @@ DEFAULTS = {"sample_interval_s": 30, "retention_days": 30,
             "power_model": {"cpu_idle_w": 25, "cpu_max_w": 120, "other_w": 40}}
 LIMITS = {"sample_interval_s": (1, 3600), "retention_days": (1, 3650)}
 lock = threading.Lock()
+
+# Access log: which computer (IP + reported hostname) talked to the API. Lives in the data volume, never in git.
+ACCESS_LOG = logging.getLogger("access")
+ACCESS_LOG.setLevel(logging.INFO)
+try:
+    _h = logging.handlers.RotatingFileHandler(os.environ.get("ACCESS_LOG_PATH", "access.log"), maxBytes=1_000_000, backupCount=5)
+    _h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    ACCESS_LOG.addHandler(_h)
+except OSError as e:
+    print("access log disabled:", e)
 
 SAMPLE_COLS = [  # flat columns of the `samples` table: (name, extractor over the collector payload)
     ("cpu_percent", lambda s: s["cpu"]["util_percent"]),
@@ -256,6 +266,7 @@ class H(BaseHTTPRequestHandler):
             return self.send(404, {"error": "not found"})
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            self.who = str(body.get("hostname") or body.get("source") or "")[:64]
             if self.path == "/api/live":
                 live_add(body)
                 return self.send(200, {"ok": True})
@@ -264,8 +275,15 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:
             self.send(400, {"error": str(e)})
 
-    def log_message(self, *a):
-        pass
+    who = ""  # hostname/source reported in a POST body, for the access log
+
+    def log_message(self, fmt, *a):
+        if self.path == "/health":  # skip the docker healthcheck noise
+            return
+        try:
+            ACCESS_LOG.info("%s %s %s %s %s", self.client_address[0], self.command, self.path, a[1] if len(a) > 1 else "-", self.who)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

@@ -1,2 +1,22 @@
+# data, logs
 *.db
+*.db-*
+*.sqlite*
+*.log
+*.log.*
+logs/
+data/
+
+# secrets
 .env
+.env.*
+*.pem
+*.key
+*.pub
+id_*
+*_deploy
+*_deploy.pub
+secrets/
+*.secret
+*credentials*
+*token*
