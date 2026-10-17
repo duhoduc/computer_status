@@ -6,7 +6,8 @@ from urllib.parse import urlparse, parse_qs
 DB_PATH = os.environ.get("DB_PATH", "status.db")
 PORT = int(os.environ.get("PORT", "8765"))
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "general_dustinho_settings.json")
-DEFAULTS = {"sample_interval_s": 30, "retention_days": 30,
+BROWSER = {"ts": 0, "endpoint": None, "headless": None}  # last heartbeat from the host's server.js
+DEFAULTS = {"sample_interval_s": 30, "retention_days": 30, "browser_headless": False,
             "power_model": {"cpu_idle_w": 25, "cpu_max_w": 120, "other_w": 40}}
 LIMITS = {"sample_interval_s": (1, 3600), "retention_days": (1, 3650)}
 lock = threading.Lock()
@@ -72,6 +73,8 @@ def update_config(new):
             if not lo <= v <= hi:
                 raise ValueError(f"{k} must be between {lo} and {hi}")
             cfg[k] = int(v)
+    if "browser_headless" in new:
+        cfg["browser_headless"] = bool(new["browser_headless"])
     for k, v in (new.get("power_model") or {}).items():
         if k in cfg["power_model"]:
             if float(v) < 0:
@@ -243,6 +246,10 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/api/live":
             n = int(q.get("n", ["300"])[0])
             return self.send(200, {"latest": LIVE[-1] if LIVE else None, "history": list(LIVE)[-n:]})
+        if u.path == "/api/browser":
+            age = time.time() - BROWSER["ts"]
+            return self.send(200, {"up": age < 20, "age_s": int(age) if BROWSER["ts"] else None, "endpoint": BROWSER["endpoint"],
+                                   "running_headless": BROWSER["headless"], "wanted_headless": load_config()["browser_headless"]})
         if u.path == "/api/settings":
             return self.send(200, {"settings": load_config(), "db": db_stats(), "file": "general_dustinho_settings.json"})
         if u.path == "/api/samples":
@@ -262,6 +269,13 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, {"settings": update_config(json.loads(self.rfile.read(n)))})
             except Exception as e:
                 return self.send(400, {"error": str(e)})
+        if self.path == "/api/browser/heartbeat":
+            try:
+                b = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                BROWSER.update(ts=time.time(), endpoint=b.get("endpoint"), headless=b.get("headless"))
+                return self.send(200, {"ok": True})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
         if self.path not in ("/api/status", "/api/live"):
             return self.send(404, {"error": "not found"})
         try:
@@ -278,7 +292,7 @@ class H(BaseHTTPRequestHandler):
     who = ""  # hostname/source reported in a POST body, for the access log
 
     def log_message(self, fmt, *a):
-        if self.path == "/health":  # skip the docker healthcheck noise
+        if self.path in ("/health", "/api/browser/heartbeat", "/api/browser"):  # skip polling noise
             return
         try:
             ACCESS_LOG.info("%s %s %s %s %s", self.client_address[0], self.command, self.path, a[1] if len(a) > 1 else "-", self.who)

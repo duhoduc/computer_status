@@ -26,6 +26,13 @@
 <h1 id="host">Live computer status</h1>
 <div class="sub" id="sub">connecting...</div>
 <div class="layout">
+<div class="card" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+  <span><i class="led" id="led-app"></i> Dashboard :8765</span>
+  <span><i class="led" id="led-br"></i> Browser service <small id="br-info"></small></span>
+  <button id="br-toggle" disabled>Headless: ?</button><small id="br-msg"></small>
+</div>
+<style>.led{display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-right:6px;vertical-align:-1px}
+.led.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.led.off{background:#e74c3c;box-shadow:0 0 6px #e74c3c}</style>
 <div class="grid" id="g"></div>
 <aside class="card" id="settings">
   <h2><span>Settings</span><span class="stats" style="margin:0" id="sfile"></span></h2>
@@ -116,4 +123,23 @@ async function tick(){
   }catch(e){document.getElementById('sub').innerHTML='<span class="warn">server unreachable</span>'}
 }
 tick();setInterval(tick,1000);
+</script>
+<script>
+let wantHeadless=null;
+async function brTick(){
+  const led=(id,on)=>document.getElementById(id).className='led '+(on?'on':'off');
+  try{
+    const b=await (await fetch('/api/browser',{cache:'no-store'})).json();
+    led('led-app',true); led('led-br',b.up);
+    wantHeadless=b.wanted_headless;
+    document.getElementById('br-info').textContent=b.up?`${b.endpoint} (${b.running_headless?'headless':'window'})`:'down';
+    const t=document.getElementById('br-toggle'); t.disabled=false; t.textContent='Headless: '+(wantHeadless?'ON':'OFF')+' (click to switch)';
+    document.getElementById('br-msg').textContent=b.up&&b.running_headless!==wantHeadless?'restarting...':'';
+  }catch(e){led('led-app',false);led('led-br',false)}
+}
+document.getElementById('br-toggle').onclick=async()=>{
+  await fetch('/api/settings',{method:'POST',body:JSON.stringify({browser_headless:!wantHeadless})});
+  brTick();
+};
+brTick();setInterval(brTick,3000);
 </script>

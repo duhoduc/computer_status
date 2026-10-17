@@ -1,6 +1,7 @@
 {
   "sample_interval_s": 30,
   "retention_days": 30,
+  "browser_headless": false,
   "power_model": {
     "cpu_idle_w": 25,
     "cpu_max_w": 120,
