@@ -116,12 +116,12 @@ function draw(c,hist){
   for(let i=0;i<=4;i++){const y=h*i/4;x.strokeStyle=css('--grid');x.lineWidth=1;x.beginPath();x.moveTo(L,y);x.lineTo(W,y);x.stroke();
     x.fillText((max*(4-i)/4).toFixed(max<20?1:0),L-4,Math.min(Math.max(y,6),h-2))}
   x.textAlign='left';x.fillText(unit,2,h+8);
-  const t1=hist.length?hist[hist.length-1].ts:0,t0=hist.length?hist[0].ts:0,span=t1-t0;
+  const t1=Date.now()/1000,t0=WIN?t1-WIN:(hist.length?hist[0].ts:t1),span=Math.max(1,t1-t0);
   const fmtT=t=>{const d=new Date(t*1000);return span>86400?d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:span<600?'2-digit':undefined})};
   x.textBaseline='alphabetic';
-  if(span>0)for(let i=0;i<=3;i++){x.textAlign=i==0?'left':i==3?'right':'center';x.fillText(fmtT(t0+span*i/3),L+w*i/3,H-3)}
+  for(let i=0;i<=3;i++){x.textAlign=i==0?'left':i==3?'right':'center';x.fillText(fmtT(t0+span*i/3),L+w*i/3,H-3)}
   if(!nums.length)return;
-  const N=Math.max(hist.length,WIN&&WIN<=900?WIN:2),px=i=>L+w-(hist.length-1-i)*w/(N-1),py=v=>h-(v/max)*(h-2)-1;
+  const px=i=>L+w*Math.min(1,Math.max(0,(hist[i].ts-t0)/span)),py=v=>h-(v/max)*(h-2)-1;
   x.beginPath();let started=false;
   vals.forEach((v,i)=>{if(v==null)return;started?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v));started=true});
   x.strokeStyle=css(c.color);x.lineWidth=1.6;x.stroke();
@@ -138,7 +138,7 @@ function nest(r){return {ts:r.ts,cpu:{util_percent:r.cpu_percent,temp_c:r.cpu_te
   gpu:{util_percent:r.gpu_percent,temp_c:r.gpu_temp_c},power:{total_w_est:r.power_total_w_est},
   disk:{active_percent:r.disk_active_percent},network:{recv_mbps:r.net_recv_mbps,sent_mbps:r.net_sent_mbps}}}
 async function getHist(live){
-  if(WIN&&WIN<=900)return live.history.slice(-WIN);
+  if(WIN&&WIN<=840)return live.history.filter(s=>s.ts>=Date.now()/1000-WIN);
   const rows=await (await fetch(WIN?`/api/samples?hours=${WIN/3600}&points=600`:'/api/samples?hours=0&points=600')).json();
   return rows.map(nest);
 }
