@@ -1,10 +1,10 @@
-﻿// house_browser - Playwright 1.63.0 remote Chrome server, reachable over Tailscale.
+// house_browser - Playwright 1.63.0 remote Chrome server, reachable over Tailscale.
 //
 // Edit the settings below, then restart the scheduled task (see README.md):
 //   powershell -ExecutionPolicy Bypass -File C:\computer_status\restart-server.ps1
 
 // ======================= SETTINGS =======================
-const SETTINGS = require('path').join(__dirname, 'general_dustinho_settings.json');  // "browser_headless" here; toggled from http://localhost:8765
+const SETTINGS = require('path').join(__dirname, 'general_computer_settings.json');  // "browser_headless" here; toggled from http://localhost:8765
 const readHeadless = () => { try { return !!JSON.parse(require('fs').readFileSync(SETTINGS, 'utf8')).browser_headless; } catch { return false; } };
 const HEADLESS = readHeadless();   // true = no window, false = Chrome window visible on this PC's desktop
 const APP = 'http://localhost:8765';

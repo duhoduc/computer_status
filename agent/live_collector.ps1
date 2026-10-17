@@ -9,8 +9,8 @@ $nvidia = [bool](Get-Command nvidia-smi -ErrorAction SilentlyContinue)
 
 # Power model (ESTIMATE): linear between idle and full-load package power for the CPU,
 # plus a flat allowance for board/RAM/SSD/fans. GPU power is measured (nvidia-smi).
-$settingsFile = Join-Path $PSScriptRoot "..\general_dustinho_settings.json"
-$cpuIdleW = 25; $cpuMaxW = 120; $otherW = 40   # fallbacks; overridden by general_dustinho_settings.json
+$settingsFile = Join-Path $PSScriptRoot "..\general_computer_settings.json"
+$cpuIdleW = 25; $cpuMaxW = 120; $otherW = 40   # fallbacks; overridden by general_computer_settings.json
 $loop = 0
 
 $counters = @(
