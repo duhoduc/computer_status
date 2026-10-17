@@ -15,7 +15,8 @@
   .stats{color:var(--mut);font-size:12px;line-height:1.5;margin-top:6px}
   canvas{width:100%;height:90px;display:block}
   .warn{color:var(--pow)}
-  .layout{display:grid;grid-template-columns:1fr 290px;gap:12px;align-items:start}
+  .layout main{min-width:0}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;align-items:start}
   @media (max-width:900px){.layout{grid-template-columns:1fr}}
   #settings label{display:block;margin:8px 0 2px;color:var(--mut);font-size:12px}
   #settings input{width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--grid);border-radius:6px;background:var(--bg);color:var(--fg)}
@@ -23,17 +24,24 @@
   #settings h3{font-size:12px;margin:14px 0 0;color:var(--mut);text-transform:uppercase}
   #msg{margin-left:8px;font-size:12px}
 </style>
-<h1 id="host">Live computer status</h1>
-<div class="sub" id="sub">connecting...</div>
+<header class="card topbar">
+  <div class="tb-id"><h1 id="host">Live computer status</h1><div class="sub" id="sub">connecting...</div></div>
+  <div class="tb-svc"><i class="led" id="led-app"></i><div><b>Dashboard</b><small>:8765</small></div></div>
+  <div class="tb-svc"><i class="led" id="led-br"></i><div><b>Browser service</b><small id="br-info"></small></div></div>
+  <div class="tb-act"><button id="br-toggle" disabled>Headless: ?</button><small id="br-msg"></small></div>
+</header>
+<style>
+.topbar{display:flex;gap:28px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.topbar .sub{margin:0}.tb-id{flex:1 1 220px}
+.tb-svc{display:flex;align-items:center;gap:4px}.tb-svc b{display:block;font-size:13px}.tb-svc small{color:var(--mut);font-size:12px}
+.tb-act{display:flex;align-items:center;gap:8px}
+.tb-act button{padding:7px 14px;border:0;border-radius:6px;background:var(--cpu);color:#fff;cursor:pointer}
+.tb-act button:disabled{opacity:.5;cursor:default}.tb-act small{color:var(--mut)}
+.led{flex:none;display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-right:6px}
+.led.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.led.off{background:#e74c3c;box-shadow:0 0 6px #e74c3c}
+</style>
 <div class="layout">
-<div class="card" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-  <span><i class="led" id="led-app"></i> Dashboard :8765</span>
-  <span><i class="led" id="led-br"></i> Browser service <small id="br-info"></small></span>
-  <button id="br-toggle" disabled>Headless: ?</button><small id="br-msg"></small>
-</div>
-<style>.led{display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-right:6px;vertical-align:-1px}
-.led.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.led.off{background:#e74c3c;box-shadow:0 0 6px #e74c3c}</style>
-<div class="grid" id="g"></div>
+<main><div class="grid" id="g"></div></main>
 <aside class="card" id="settings">
   <h2><span>Settings</span><span class="stats" style="margin:0" id="sfile"></span></h2>
   <label>Sample interval to SQLite (seconds)</label><input id="s-interval" type="number" min="1" max="3600">
