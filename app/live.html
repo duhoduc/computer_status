@@ -46,6 +46,9 @@
   <h2><span>Settings</span><span class="stats" style="margin:0" id="sfile"></span></h2>
   <label>Sample interval to SQLite (seconds)</label><input id="s-interval" type="number" min="1" max="3600">
   <label>Retention (days)</label><input id="s-retention" type="number" min="1" max="3650">
+  <h3>Graph window</h3>
+  <label>Show last <b id="w-lbl"></b></label><input id="w-range" type="range" min="0" max="100" value="0">
+  <div class="stats" id="w-info"></div>
   <h3>Power model (estimate)</h3>
   <label>CPU idle (W)</label><input id="s-idle" type="number" min="0">
   <label>CPU full load (W)</label><input id="s-max" type="number" min="0">
@@ -68,6 +71,7 @@ async function loadSettings(fillInputs){
     document.getElementById('s-other').value=s.power_model.other_w;
     document.getElementById('sfile').textContent=d.file;
   }
+  if(b.first_ts){SPAN=Math.max(120,Date.now()/1000-b.first_ts);wLabel()}
   const last=b.last_ts?new Date(b.last_ts*1000).toLocaleTimeString():'-';
   document.getElementById('dbstats').innerHTML=`${b.rows} rows · ${b.db_size_kb} KB<br>last saved ${last}<br>${b.db_path}`;
 }
@@ -109,15 +113,32 @@ function draw(c,hist){
   x.strokeStyle=css('--grid');x.lineWidth=1;
   for(let i=0;i<=4;i++){const y=h*i/4;x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke()}
   if(!nums.length)return;
-  const N=Math.max(hist.length,300),px=i=>w-(hist.length-1-i)*w/(N-1),py=v=>h-(v/max)*(h-2)-1;
+  const N=Math.max(hist.length,WIN&&WIN<=900?WIN:2),px=i=>w-(hist.length-1-i)*w/(N-1),py=v=>h-(v/max)*(h-2)-1;
   x.beginPath();let started=false;
   vals.forEach((v,i)=>{if(v==null)return;started?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v));started=true});
   x.strokeStyle=css(c.color);x.lineWidth=1.6;x.stroke();
   x.lineTo(w,h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
 }
+let WIN=60,SPAN=86400; // window length (s); history span (s)
+const fmtDur=t=>t<3600?Math.round(t/60)+' min':t<86400?(t/3600).toFixed(t%3600?1:0)+' h':(t/86400).toFixed(t%86400?1:0)+' days';
+const wFromPos=p=>p>=100?0:Math.round(60*Math.pow(Math.max(SPAN,120)/60,p/100)); // log scale 60s..SPAN, 0 = all
+function wLabel(){const l=document.getElementById('w-lbl');l.textContent=WIN?fmtDur(WIN):'whole history ('+fmtDur(SPAN)+')'}
+const wr=document.getElementById('w-range');
+wLabel();
+wr.oninput=()=>{WIN=wFromPos(+wr.value);wLabel();try{localStorage.w_pos=wr.value}catch(e){}tick()};
+try{if(localStorage.w_pos!=null){wr.value=localStorage.w_pos;WIN=wFromPos(+wr.value)}}catch(e){}
+function nest(r){return {ts:r.ts,cpu:{util_percent:r.cpu_percent,temp_c:r.cpu_temp_c},memory:{percent:r.ram_percent},
+  gpu:{util_percent:r.gpu_percent,temp_c:r.gpu_temp_c},power:{total_w_est:r.power_total_w_est},
+  disk:{active_percent:r.disk_active_percent},network:{recv_mbps:r.net_recv_mbps,sent_mbps:r.net_sent_mbps}}}
+async function getHist(live){
+  if(WIN&&WIN<=900)return live.history.slice(-WIN);
+  const rows=await (await fetch(WIN?`/api/samples?hours=${WIN/3600}&points=600`:'/api/samples?hours=0&points=600')).json();
+  return rows.map(nest);
+}
 async function tick(){
   try{
-    const d=await (await fetch('/api/live?n=300')).json();
+    const d=await (await fetch('/api/live?n=900')).json();
+    const hist=await getHist(d);
     if(!d.latest){document.getElementById('sub').textContent='waiting for collector (agent/live_collector.ps1)...';return}
     const s=d.latest,age=(Date.now()/1000-s.ts);
     document.getElementById('host').textContent=s.hostname+' - live status';
@@ -126,7 +147,7 @@ async function tick(){
       let v=null;try{v=c.val(s)}catch(e){}
       document.getElementById(c.id+'-v').textContent=v==null?'n/a':c.fmt(v);
       document.getElementById(c.id+'-x').innerHTML=c.extra(s);
-      draw(c,d.history);
+      draw(c,hist);
     }
   }catch(e){document.getElementById('sub').innerHTML='<span class="warn">server unreachable</span>'}
 }

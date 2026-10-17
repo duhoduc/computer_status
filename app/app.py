@@ -117,13 +117,16 @@ def save_sample(s):
         c.close()
 
 
-def samples(hours, since=None, limit=50000):
+def samples(hours, since=None, limit=50000, points=0):
     """Rows newer than `since` (epoch seconds) if given, else from the last `hours`. Oldest first."""
     c = db()
     c.row_factory = sqlite3.Row
-    start = since if since is not None else time.time() - hours * 3600
+    start = since if since is not None else (time.time() - hours * 3600 if hours > 0 else 0)  # hours<=0: whole history
     rows = [dict(r) for r in c.execute("SELECT * FROM samples WHERE ts>? ORDER BY ts LIMIT ?", (start, limit))]
     c.close()
+    if points and len(rows) > points:  # thin out evenly, keep the newest row
+        step = len(rows) / points
+        rows = [rows[min(len(rows) - 1, int(i * step))] for i in range(points - 1)] + [rows[-1]]
     return rows
 
 
@@ -254,7 +257,7 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, {"settings": load_config(), "db": db_stats(), "file": "general_computer_settings.json"})
         if u.path == "/api/samples":
             since = float(q["since"][0]) if "since" in q else None
-            return self.send(200, samples(float(q.get("hours", ["24"])[0]), since))
+            return self.send(200, samples(float(q.get("hours", ["24"])[0]), since, points=int(q.get("points", ["0"])[0])))
         if u.path in ("/", "/live"):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "live.html"), "rb") as f:
                 return self.send(200, f.read(), "text/html; charset=utf-8")
