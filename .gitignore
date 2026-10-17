@@ -20,3 +20,8 @@ secrets/
 *.secret
 *credentials*
 *token*
+
+# house_browser runtime binaries
+browsers/
+node/
+node_modules/
