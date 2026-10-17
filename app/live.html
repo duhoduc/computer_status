@@ -1,0 +1,119 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live computer status</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--fg:#1c2330;--mut:#667085;--grid:#e4e7ec;
+        --cpu:#2563eb;--ram:#9333ea;--gpu:#16a34a;--temp:#ea580c;--pow:#dc2626;--net:#0891b2}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#181c25;--fg:#e6e9ef;--mut:#8b93a3;--grid:#2a303c}}
+  body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif}
+  h1{font-size:18px;margin:0 0 4px} .sub{color:var(--mut);margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+  .card{background:var(--card);border-radius:10px;padding:12px 14px;box-shadow:0 1px 2px #0002}
+  .card h2{font-size:13px;margin:0;color:var(--mut);font-weight:600;display:flex;justify-content:space-between}
+  .big{font-size:28px;font-weight:700;margin:2px 0}
+  .stats{color:var(--mut);font-size:12px;line-height:1.5;margin-top:6px}
+  canvas{width:100%;height:90px;display:block}
+  .warn{color:var(--pow)}
+  .layout{display:grid;grid-template-columns:1fr 290px;gap:12px;align-items:start}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}}
+  #settings label{display:block;margin:8px 0 2px;color:var(--mut);font-size:12px}
+  #settings input{width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--grid);border-radius:6px;background:var(--bg);color:var(--fg)}
+  #settings button{margin-top:12px;padding:7px 14px;border:0;border-radius:6px;background:var(--cpu);color:#fff;cursor:pointer}
+  #settings h3{font-size:12px;margin:14px 0 0;color:var(--mut);text-transform:uppercase}
+  #msg{margin-left:8px;font-size:12px}
+</style>
+<h1 id="host">Live computer status</h1>
+<div class="sub" id="sub">connecting...</div>
+<div class="layout">
+<div class="grid" id="g"></div>
+<aside class="card" id="settings">
+  <h2><span>Settings</span><span class="stats" style="margin:0" id="sfile"></span></h2>
+  <label>Sample interval to SQLite (seconds)</label><input id="s-interval" type="number" min="1" max="3600">
+  <label>Retention (days)</label><input id="s-retention" type="number" min="1" max="3650">
+  <h3>Power model (estimate)</h3>
+  <label>CPU idle (W)</label><input id="s-idle" type="number" min="0">
+  <label>CPU full load (W)</label><input id="s-max" type="number" min="0">
+  <label>Other components (W)</label><input id="s-other" type="number" min="0">
+  <button id="s-save">Save</button><span id="msg"></span>
+  <h3>Pages</h3>
+  <div class="stats"><a href="/api/samples?hours=24" style="color:var(--cpu)">Saved samples (JSON)</a> · <a href="/status" style="color:var(--cpu)">WSL / system snapshot</a></div>
+  <h3>Database</h3>
+  <div class="stats" id="dbstats"></div>
+</aside>
+</div>
+<script>
+async function loadSettings(fillInputs){
+  const d=await (await fetch('/api/settings')).json(),s=d.settings,b=d.db;
+  if(fillInputs){
+    document.getElementById('s-interval').value=s.sample_interval_s;
+    document.getElementById('s-retention').value=s.retention_days;
+    document.getElementById('s-idle').value=s.power_model.cpu_idle_w;
+    document.getElementById('s-max').value=s.power_model.cpu_max_w;
+    document.getElementById('s-other').value=s.power_model.other_w;
+    document.getElementById('sfile').textContent=d.file;
+  }
+  const last=b.last_ts?new Date(b.last_ts*1000).toLocaleTimeString():'-';
+  document.getElementById('dbstats').innerHTML=`${b.rows} rows · ${b.db_size_kb} KB<br>last saved ${last}<br>${b.db_path}`;
+}
+document.getElementById('s-save').onclick=async()=>{
+  const v=id=>Number(document.getElementById(id).value),m=document.getElementById('msg');
+  const r=await fetch('/api/settings',{method:'POST',body:JSON.stringify({sample_interval_s:v('s-interval'),retention_days:v('s-retention'),
+    power_model:{cpu_idle_w:v('s-idle'),cpu_max_w:v('s-max'),other_w:v('s-other')}})});
+  const j=await r.json();m.textContent=r.ok?'saved':j.error;m.className=r.ok?'':'warn';
+  if(r.ok)loadSettings(true);
+};
+loadSettings(true);setInterval(()=>loadSettings(false),5000);</script>
+<script>
+const CARDS=[
+ {id:'cpu',title:'CPU',color:'--cpu',max:100,val:s=>s.cpu.util_percent,fmt:v=>v.toFixed(0)+'%',
+  extra:s=>`${s.cpu.name}<br>Speed ${s.cpu.speed_ghz} GHz · ${s.cpu.processes} processes · ${s.cpu.threads} threads<br>`+
+           `Temp ${s.cpu.temp_c==null?'n/a (needs LibreHardwareMonitor)':s.cpu.temp_c.toFixed(0)+' °C'}`},
+ {id:'ram',title:'Memory',color:'--ram',max:100,val:s=>s.memory.percent,fmt:v=>v.toFixed(0)+'%',
+  extra:s=>`In use ${(s.memory.used_mb/1024).toFixed(1)} / ${(s.memory.total_mb/1024).toFixed(1)} GB<br>Committed ${(s.memory.committed_mb/1024).toFixed(1)} GB · Cached ${(s.memory.cached_mb/1024).toFixed(1)} GB`},
+ {id:'gpu',title:'GPU',color:'--gpu',max:100,val:s=>s.gpu?s.gpu.util_percent:null,fmt:v=>v.toFixed(0)+'%',
+  extra:s=>s.gpu?`${s.gpu.name}<br>VRAM ${(s.gpu.vram_used_mb/1024).toFixed(1)} / ${(s.gpu.vram_total_mb/1024).toFixed(1)} GB · ${s.gpu.clock_mhz} MHz<br>Temp ${s.gpu.temp_c} °C · Power ${s.gpu.power_w} W · Fan ${s.gpu.fan_percent}%`:'no NVIDIA GPU'},
+ {id:'gtemp',title:'GPU temperature',color:'--temp',max:100,val:s=>s.gpu?s.gpu.temp_c:null,fmt:v=>v.toFixed(0)+' °C',extra:()=>''},
+ {id:'ctemp',title:'CPU temperature',color:'--temp',max:100,val:s=>s.cpu.temp_c,fmt:v=>v.toFixed(0)+' °C',
+  extra:s=>s.cpu.temp_c==null?'Windows exposes no CPU sensor without a driver. Run LibreHardwareMonitor (admin) with Options → Remote Web Server (port 8085) and it shows up here.':''},
+ {id:'pow',title:'Power (estimate)',color:'--pow',max:null,val:s=>s.power.total_w_est,fmt:v=>v.toFixed(0)+' W',
+  extra:s=>`CPU ~${s.power.cpu_w_est} W (model) · GPU ${s.power.gpu_w} W (measured) · rest ~${s.power.other_w_est} W (flat)`},
+ {id:'disk',title:'Disk',color:'--net',max:100,val:s=>s.disk.active_percent,fmt:v=>v.toFixed(0)+'%',
+  extra:s=>`Read ${s.disk.read_mbps} MB/s · Write ${s.disk.write_mbps} MB/s`},
+ {id:'net',title:'Network',color:'--net',max:null,val:s=>s.network.recv_mbps+s.network.sent_mbps,fmt:v=>v.toFixed(1)+' Mbps',
+  extra:s=>`Down ${s.network.recv_mbps} Mbps · Up ${s.network.sent_mbps} Mbps`},
+];
+const g=document.getElementById('g');
+for(const c of CARDS){g.insertAdjacentHTML('beforeend',`<div class="card"><h2><span>${c.title}</span><span id="${c.id}-v" class="big"></span></h2><canvas id="${c.id}-c"></canvas><div class="stats" id="${c.id}-x"></div></div>`)}
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function draw(c,hist){
+  const cv=document.getElementById(c.id+'-c'),r=devicePixelRatio||1;
+  cv.width=cv.clientWidth*r;cv.height=cv.clientHeight*r;const x=cv.getContext('2d');x.scale(r,r);
+  const w=cv.clientWidth,h=cv.clientHeight,vals=hist.map(s=>{try{return c.val(s)}catch(e){return null}});
+  const nums=vals.filter(v=>v!=null);const max=c.max||Math.max(10,...nums)*1.15;
+  x.strokeStyle=css('--grid');x.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=h*i/4;x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke()}
+  if(!nums.length)return;
+  const N=Math.max(hist.length,300),px=i=>w-(hist.length-1-i)*w/(N-1),py=v=>h-(v/max)*(h-2)-1;
+  x.beginPath();let started=false;
+  vals.forEach((v,i)=>{if(v==null)return;started?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v));started=true});
+  x.strokeStyle=css(c.color);x.lineWidth=1.6;x.stroke();
+  x.lineTo(w,h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
+}
+async function tick(){
+  try{
+    const d=await (await fetch('/api/live?n=300')).json();
+    if(!d.latest){document.getElementById('sub').textContent='waiting for collector (agent/live_collector.ps1)...';return}
+    const s=d.latest,age=(Date.now()/1000-s.ts);
+    document.getElementById('host').textContent=s.hostname+' - live status';
+    document.getElementById('sub').innerHTML=age<5?'live, updated every second':`<span class="warn">collector stalled (${age.toFixed(0)}s ago)</span>`;
+    for(const c of CARDS){
+      let v=null;try{v=c.val(s)}catch(e){}
+      document.getElementById(c.id+'-v').textContent=v==null?'n/a':c.fmt(v);
+      document.getElementById(c.id+'-x').innerHTML=c.extra(s);
+      draw(c,d.history);
+    }
+  }catch(e){document.getElementById('sub').innerHTML='<span class="warn">server unreachable</span>'}
+}
+tick();setInterval(tick,1000);
+</script>

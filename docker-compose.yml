@@ -1,0 +1,20 @@
+services:
+  computer-status:
+    build: ./app
+    container_name: computer-status
+    restart: always          # Docker restarts it on crash, and after Docker Desktop / PC reboot
+    ports:
+      - "8765:8765"
+    volumes:
+      - status-data:/data
+      - ./general_dustinho_settings.json:/config/general_dustinho_settings.json
+    environment:
+      CONFIG_PATH: /config/general_dustinho_settings.json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8765/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  status-data:

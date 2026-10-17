@@ -1,0 +1,9 @@
+{
+  "sample_interval_s": 30,
+  "retention_days": 30,
+  "power_model": {
+    "cpu_idle_w": 25,
+    "cpu_max_w": 120,
+    "other_w": 40
+  }
+}
