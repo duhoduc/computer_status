@@ -92,6 +92,7 @@ for(const b of document.querySelectorAll('#tabs button'))b.onclick=()=>{
   if(b.dataset.t==='computer')tick();
 };
 try{const t=document.querySelector(`#tabs button[data-t="${localStorage.tab}"]`);if(t)t.click()}catch(e){}
+const selecting=()=>{const g=getSelection();return g&&!g.isCollapsed&&g.toString().length>0};
 const esc=v=>String(v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function topTable(id,rows,key,fmt,color){
   const m=Math.max(1e-9,...rows.map(r=>r[key]));
@@ -99,7 +100,7 @@ function topTable(id,rows,key,fmt,color){
     rows.map(r=>`<tr><td>${esc(r.name)}<i class="bar" style="width:${(100*r[key]/m).toFixed(0)}%;background:var(${color})"></i></td><td class="n">${r.count}</td><td class="n">${fmt(r[key])}</td></tr>`).join('');
 }
 async function procTick(){
-  if(document.getElementById('tab-proc').hidden)return;
+  if(document.getElementById('tab-proc').hidden||selecting())return;
   try{
     const d=await (await fetch('/api/live?n=1')).json(),s=d.latest;
     if(s){topTable('t-cpu',s.top_cpu||[],'cpu',v=>v.toFixed(1)+'%','--cpu');topTable('t-ram',s.top_ram||[],'mem_mb',v=>v>=1024?(v/1024).toFixed(2)+' GB':v+' MB','--ram')}
@@ -193,6 +194,7 @@ async function getHist(live){
   return rows.map(nest);
 }
 async function tick(){
+  if(selecting())return;
   try{
     const d=await (await fetch('/api/live?n=900')).json();
     const hist=await getHist(d);
