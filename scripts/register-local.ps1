@@ -1,4 +1,4 @@
-# (Re)create the scheduled task "ComputerStatusLocal": runs agent\local.js at logon,
+# (Re)create the scheduled task "ComputerStatusLocal": runs agent\start-local.ps1 (keeps local.js running) at logon,
 # with a 5-minute watchdog. No admin rights needed. Usage:
 #   powershell -ExecutionPolicy Bypass -File C:\computer_status\scripts\register-local.ps1
 
@@ -9,10 +9,8 @@ New-Item -ItemType Directory -Force (Join-Path $Base 'logs') | Out-Null
 function Pick($f) {  # machine-specific variant: name_<COMPUTERNAME>.ext wins over name.ext
   $i = Get-Item $f; $c = Join-Path $i.DirectoryName ($i.BaseName + '_' + $env:COMPUTERNAME.ToUpper() + $i.Extension)
   if (Test-Path $c) { $c } else { $f } }
-$Node = Join-Path $Base 'node\node.exe'   # portable Node if present, else the system one
-if (-not (Test-Path $Node)) { $Node = (Get-Command node).Source }
-$cmd = '/c ""' + $Node + '" "' + (Pick "$Base\agent\local.js") + '" >> "' + $Base + '\logs\local_jobs.log" 2>&1"'
-$action = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ('--headless cmd.exe ' + $cmd) `
+$action = New-ScheduledTaskAction -Execute 'conhost.exe' `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Pick "$Base\agent\start-local.ps1")`"" `
     -WorkingDirectory $Base
 $watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
 $trigger = @((New-ScheduledTaskTrigger -AtLogOn -User $User), $watchdog)

@@ -283,7 +283,7 @@ document.getElementById('br-toggle').onclick=async()=>{
 brTick();setInterval(brTick,3000);
 // Rebuild button: talks to the host agent (agent/local.js, port 8766), which survives the app container going down.
 const RB=`http://${location.hostname}:8766`,rbBtn=document.getElementById('rb-btn'),rbMsg=document.getElementById('rb-msg');
-let rbUi='idle',rbHold=0;  // idle | rebuilding | rebuilt | failed
+let rbUi='idle',rbHold=0,rbStart=0;  // idle | rebuilding | rebuilt | failed
 function rbShow(){rbBtn.className=rbUi==='idle'?'':rbUi;rbBtn.disabled=rbUi!=='idle';
   rbBtn.textContent={idle:'Rebuild',rebuilding:'Rebuilding...',rebuilt:'Rebuilt',failed:'Rebuild failed'}[rbUi]}
 async function rbPoll(){
@@ -291,16 +291,17 @@ async function rbPoll(){
   if(rbUi==='idle')rbMsg.textContent='';
   if(rbUi==='rebuilding'||(rbUi==='idle'&&st.state==='rebuilding')){
     if(st.state==='rebuilding'){rbUi='rebuilding'}
+    else if(st.state==='idle'&&Date.now()-rbStart>30000){rbUi='idle'}  // agent restarted and lost the job: stop waiting
     else if(st.state==='failed'){rbUi='failed';rbHold=Date.now();rbMsg.textContent=(st.tail||'').split('\n').pop()}
     else if(st.state==='done'){  // wait until the app answers again, then show "Rebuilt" for 10 s
-      try{if((await fetch('/health',{cache:'no-store'})).ok){rbUi='rebuilt';rbHold=Date.now()}}catch(e){}}
+      try{if((await fetch('/health',{cache:'no-store'})).ok){rbUi='rebuilt';rbHold=Date.now();rbMsg.textContent=(st.steps||[]).map(x=>x.replace(/^[a-z ]+: /,'')).join(' \u00b7 ')}}catch(e){}}
   }else if((rbUi==='rebuilt'||rbUi==='failed')&&Date.now()-rbHold>=10000){
     const reload=rbUi==='rebuilt';rbUi='idle';rbMsg.textContent='';if(reload)location.reload();  // reload picks up the new page code
   }
   rbShow();
 }
 rbBtn.onclick=async()=>{
-  try{await fetch(RB+'/rebuild',{method:'POST'});rbUi='rebuilding';rbMsg.textContent='';rbShow()}
+  try{await fetch(RB+'/rebuild',{method:'POST'});rbUi='rebuilding';rbStart=Date.now();rbMsg.textContent='';rbShow()}
   catch(e){rbMsg.textContent='agent offline (is ComputerStatusLocal running?)'}
 };
 rbPoll();setInterval(rbPoll,1000);

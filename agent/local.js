@@ -103,23 +103,41 @@ async function claudeTick() {
 claudeTick(); setInterval(claudeTick, 15000);
 
 // ---- Rebuild control: the dashboard (inside Docker) can't rebuild itself, so this host-side process does it ----
-// POST /rebuild starts `docker compose up -d --build` (+ restarts the collector); GET /status reports progress.
+// POST /rebuild rebuilds what changed (app always; browser/local jobs only if their files changed); GET /status reports progress.
 // Runs on its own port so the dashboard page can keep polling it while the app container is down.
 const http = require('http');
 const REBUILD_PORT = 8766;
 const ROOT = path.join(__dirname, '..');
-let rb = { state: 'idle', started: 0, finished: 0, tail: '' };
-function rebuild() {
+const START = Date.now();
+const STATE = path.join(ROOT, 'data', 'rebuild_state.json');   // survives local.js restarting itself
+let rb = { state: 'idle', started: 0, finished: 0, tail: '', steps: [] };
+try { const o = JSON.parse(fs.readFileSync(STATE, 'utf8')); if (o.state !== 'rebuilding' && Date.now() - o.finished < 120000) rb = o; } catch {}
+const saveRb = () => { try { fs.mkdirSync(path.dirname(STATE), { recursive: true }); fs.writeFileSync(STATE, JSON.stringify(rb)); } catch {} };
+const newest = (dir, exts) => Math.max(0, ...fs.readdirSync(dir).filter(f => exts.includes(path.extname(f))).map(f => fs.statSync(path.join(dir, f)).mtimeMs));
+const run = (cmd, args) => new Promise(res => execFile(cmd, args, { cwd: ROOT, windowsHide: true, maxBuffer: 32e6, timeout: 15 * 60000 }, (err, out, errout) => res({ err, text: String(errout || out || (err && err.message) || '') })));
+const browserStart = async () => {   // when the running browser server (node) was started, epoch ms; null if not running
+  const r = await run('powershell.exe', ['-NoProfile', '-Command', "$p = Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match 'browser.server' } | Select-Object -First 1; if ($p) { [int64]([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() }"]);
+  return Number(r.text.trim()) || null;
+};
+// Rebuilds the local app (Docker); restarts the browser service ONLY if its files changed since it started;
+// restarts the local jobs (this process, collector, keep_bottom, cleaner) only if agent/ files changed since they started.
+async function rebuild() {
   if (rb.state === 'rebuilding') return;
-  rb = { state: 'rebuilding', started: Date.now(), finished: 0, tail: '' };
-  log('rebuild: docker compose up -d --build');
-  execFile('docker', ['compose', 'up', '-d', '--build'], { cwd: ROOT, windowsHide: true, maxBuffer: 32e6, timeout: 15 * 60000 }, (err, out, errout) => {
-    rb = { state: err ? 'failed' : 'done', started: rb.started, finished: Date.now(), tail: String(errout || out || (err && err.message) || '').split('\n').slice(-8).join('\n') };
-    log(`rebuild ${rb.state}`);
-    // supervisors restart these with the new scripts
-    if (!err && collectorProc) collectorProc.kill();
-    if (!err && keepBottomProc) keepBottomProc.kill();
-  });
+  rb = { state: 'rebuilding', started: Date.now(), finished: 0, tail: '', steps: [] };
+  const step = s => { rb.steps.push(s); log(`rebuild: ${s}`); };
+  step('app: docker compose up -d --build');
+  const d = await run('docker', ['compose', 'up', '-d', '--build']);
+  if (d.err) { rb = { ...rb, state: 'failed', finished: Date.now(), tail: d.text.split('\n').slice(-8).join('\n') }; saveRb(); log('rebuild failed'); return; }
+  const bs = await browserStart(), bNew = newest(path.join(ROOT, 'browser'), ['.js', '.ps1']);
+  if (bs && bNew > bs) { step('browser service: files changed, restarting'); await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'browser', 'restart-server.ps1')]); }
+  else step(bs ? 'browser service: unchanged, left running' : 'browser service: not running, left as is');
+  const selfRestart = newest(__dirname, ['.js', '.ps1']) > START;
+  step(selfRestart ? 'local jobs: changed, restarting' : 'local jobs: unchanged');
+  rb = { ...rb, state: 'done', finished: Date.now() }; saveRb(); log('rebuild done');
+  if (selfRestart) setTimeout(() => {   // start-local.ps1 starts local.js again; kill the children first so none run twice
+    try { if (collectorProc) collectorProc.kill(); if (keepBottomProc) keepBottomProc.kill(); } catch {}
+    process.exit(0);
+  }, 3000);
 }
 http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
