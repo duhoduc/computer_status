@@ -73,3 +73,17 @@ function startCollector() {
 log('local jobs started');
 startCollector();
 scan(); setInterval(scan, EVERY_SEC * 1000);
+
+// ---- Claude Code usage sampler: one sample every `claude_sample_minutes` (config), sent to the dashboard ----
+const claude = require('./claude_usage');
+const fs = require('fs');
+const CONFIG = path.join(__dirname, '..', 'config', 'general_computer_settings.json');
+let lastClaude = 0;
+async function claudeTick() {
+  let mins = 5; try { mins = Number(JSON.parse(fs.readFileSync(CONFIG, 'utf8')).claude_sample_minutes) || 5; } catch {}
+  if (Date.now() - lastClaude < mins * 60000) return;
+  lastClaude = Date.now();
+  const t = claude.totals(); if (!t) return;
+  await fetch(`${APP}/api/claude`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t), signal: AbortSignal.timeout(5000) }).catch(() => {});
+}
+claudeTick(); setInterval(claudeTick, 15000);

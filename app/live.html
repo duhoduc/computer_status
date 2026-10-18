@@ -40,7 +40,7 @@
 .led{flex:none;display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-right:6px}
 .led.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.led.off{background:#e74c3c;box-shadow:0 0 6px #e74c3c}
 </style>
-<div class="shell"><nav id="tabs"><button data-t="computer" class="on">Computer</button><button data-t="proc">Processes</button></nav><div class="panes">
+<div class="shell"><nav id="tabs"><button data-t="computer" class="on">Computer</button><button data-t="proc">Processes</button><button data-t="claude">Claude</button></nav><div class="panes">
 <div id="tab-computer" class="pane"><div class="layout">
 <main><div class="grid" id="g"></div></main>
 <aside class="card" id="settings">
@@ -68,6 +68,19 @@
     <div class="card"><h2><span>Top 10 RAM</span><span class="stats" style="margin:0">working set, grouped by name</span></h2><table class="pt" id="t-ram"></table></div>
   </div>
   <div class="card" style="margin-top:12px"><h2><span>Chromium processes</span><span class="stats" style="margin:0" id="ch-sum"></span></h2><table class="pt" id="t-chrome"></table></div>
+<div id="tab-claude" class="pane" hidden>
+  <div class="card"><h2><span>Claude Code usage in this folder</span><span class="stats" style="margin:0" id="cl-sub"></span></h2>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <label class="stats" style="margin:0">Sample every</label><input id="cl-min" type="number" min="1" max="1440" style="width:70px;padding:6px;border:1px solid var(--grid);border-radius:6px;background:var(--bg);color:var(--fg)"><span class="stats" style="margin:0">minutes</span>
+      <button id="cl-save" style="padding:6px 12px;border:0;border-radius:6px;background:var(--cpu);color:#fff;cursor:pointer">Save</button><span id="cl-msg" class="stats" style="margin:0"></span>
+      <span style="flex:1"></span><label class="stats" style="margin:0">Metric</label>
+      <select id="cl-metric" style="padding:6px;border:1px solid var(--grid);border-radius:6px;background:var(--bg);color:var(--fg)"><option value="work">input + output + cache writes</option><option value="output">output only</option><option value="cache_read">cache reads</option></select></div>
+    <div class="grid2" id="cl-tiles" style="margin-top:10px"></div></div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="card"><h2><span>Cumulative tokens</span><span id="cl1-v" class="big"></span></h2><canvas id="cl1-c"></canvas></div>
+    <div class="card"><h2><span>Tokens per sample</span><span id="cl2-v" class="big"></span></h2><canvas id="cl2-c"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h2><span>By model</span></h2><table class="pt" id="cl-models"></table></div>
 </div></div></div>
 <style>
 .shell{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;align-items:start}
@@ -88,6 +101,8 @@ for(const b of document.querySelectorAll('#tabs button'))b.onclick=()=>{
   for(const x of document.querySelectorAll('#tabs button'))x.classList.toggle('on',x===b);
   document.getElementById('tab-computer').hidden=b.dataset.t!=='computer';
   document.getElementById('tab-proc').hidden=b.dataset.t!=='proc';
+  document.getElementById('tab-claude').hidden=b.dataset.t!=='claude';
+  if(b.dataset.t==='claude')clTick();
   try{localStorage.tab=b.dataset.t}catch(e){}
   if(b.dataset.t==='computer')tick();
 };
@@ -111,6 +126,39 @@ async function procTick(){
   }catch(e){}
 }
 procTick();setInterval(procTick,2000);
+const nf=v=>v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(1)+'k':Math.round(v)+'';
+const METRICS={work:r=>r.input+r.output+r.cache_create,output:r=>r.output,cache_read:r=>r.cache_read};
+let clRows=[],clInit=false;
+function clRender(){
+  const f=METRICS[document.getElementById('cl-metric').value],rows=clRows;
+  const cum=rows.map(r=>({ts:r.ts,v:f(r)})),del=cum.map((p,i)=>({ts:p.ts,v:i?Math.max(0,p.v-cum[i-1].v):0})).slice(1);
+  const w=WIN;WIN=0;
+  try{draw({id:'cl1',color:'--ram',max:null,fmt:nf,val:p=>p.v},cum);draw({id:'cl2',color:'--cpu',max:null,fmt:nf,val:p=>p.v},del)}finally{WIN=w}
+  document.getElementById('cl1-v').textContent=cum.length?nf(cum[cum.length-1].v):'n/a';
+  document.getElementById('cl2-v').textContent=del.length?nf(del[del.length-1].v):'n/a';
+}
+async function clTick(){
+  if(document.getElementById('tab-claude').hidden||selecting())return;
+  try{
+    clRows=await (await fetch('/api/claude?hours=0')).json();
+    if(!clInit){clInit=true;const st=await (await fetch('/api/settings')).json();document.getElementById('cl-min').value=st.settings.claude_sample_minutes}
+    const l=clRows[clRows.length-1];
+    document.getElementById('cl-sub').textContent=l?`${clRows.length} samples · last ${new Date(l.ts*1000).toLocaleTimeString()}`:'waiting for first sample (agent/local.js)';
+    if(l){
+      const tile=(t,v)=>`<div class="card" style="box-shadow:none;border:1px solid var(--grid)"><h2><span>${t}</span></h2><div class="big">${v}</div></div>`;
+      document.getElementById('cl-tiles').innerHTML=tile('Messages / sessions',l.messages+' / '+l.sessions)+tile('Output tokens',nf(l.output))+tile('Input + cache writes',nf(l.input+l.cache_create))+tile('Cache reads',nf(l.cache_read));
+      document.getElementById('cl-models').innerHTML='<tr><th>Model</th><th class="n">Msgs</th><th class="n">Input</th><th class="n">Output</th><th class="n">Cache write</th><th class="n">Cache read</th></tr>'+
+        Object.entries(l.models).map(([m,x])=>`<tr><td>${esc(m)}</td><td class="n">${x.messages}</td><td class="n">${nf(x.input)}</td><td class="n">${nf(x.output)}</td><td class="n">${nf(x.cache_create)}</td><td class="n">${nf(x.cache_read)}</td></tr>`).join('');
+    }
+    clRender();
+  }catch(e){}
+}
+document.getElementById('cl-metric').onchange=clRender;
+document.getElementById('cl-save').onclick=async()=>{
+  const m=document.getElementById('cl-msg'),r=await fetch('/api/settings',{method:'POST',body:JSON.stringify({claude_sample_minutes:+document.getElementById('cl-min').value})});
+  m.textContent=r.ok?'saved':(await r.json()).error;
+};
+setInterval(clTick,30000);
 </script>
 <script>
 async function loadSettings(fillInputs){

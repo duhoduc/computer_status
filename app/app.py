@@ -8,9 +8,9 @@ PORT = int(os.environ.get("PORT", "8765"))
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "general_computer_settings.json")
 BROWSER = {"ts": 0, "endpoint": None, "headless": None, "pid": None}
 CLEANER = {"ts": 0, "chrome": []}  # last heartbeat from the host-side agent/local.js
-DEFAULTS = {"sample_interval_s": 30, "retention_days": 30, "browser_headless": False,
+DEFAULTS = {"sample_interval_s": 30, "retention_days": 30, "claude_sample_minutes": 5, "browser_headless": False,
             "power_model": {"cpu_idle_w": 25, "cpu_max_w": 120, "other_w": 40}}
-LIMITS = {"sample_interval_s": (1, 3600), "retention_days": (1, 3650)}
+LIMITS = {"sample_interval_s": (1, 3600), "retention_days": (1, 3650), "claude_sample_minutes": (1, 1440)}
 lock = threading.Lock()
 
 # Access log: which computer (IP + reported hostname) talked to the API. Lives in the data volume, never in git.
@@ -91,7 +91,29 @@ def db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_src_ts ON status (source, ts)")
     cols = ", ".join(f"{n} REAL" for n, _ in SAMPLE_COLS)
     c.execute(f"CREATE TABLE IF NOT EXISTS samples (ts REAL PRIMARY KEY, hostname TEXT, {cols})")
+    c.execute("CREATE TABLE IF NOT EXISTS claude_usage (ts REAL PRIMARY KEY, input REAL, output REAL, cache_read REAL, cache_create REAL, messages INTEGER, sessions INTEGER, models TEXT)")
     return c
+
+
+def save_claude(t):
+    with lock:
+        c = db()
+        with c:
+            c.execute("INSERT OR REPLACE INTO claude_usage VALUES (?,?,?,?,?,?,?,?)", (time.time(), t.get("input", 0), t.get("output", 0), t.get("cache_read", 0),
+                      t.get("cache_create", 0), t.get("messages", 0), t.get("sessions", 0), json.dumps(t.get("models", {}))))
+            c.execute("DELETE FROM claude_usage WHERE ts < ?", (time.time() - load_config()["retention_days"] * 86400,))
+        c.close()
+
+
+def claude_rows(hours):
+    c = db()
+    c.row_factory = sqlite3.Row
+    start = time.time() - hours * 3600 if hours > 0 else 0
+    rows = [dict(r) for r in c.execute("SELECT * FROM claude_usage WHERE ts>? ORDER BY ts", (start,))]
+    c.close()
+    for r in rows:
+        r["models"] = json.loads(r["models"] or "{}")
+    return rows
 
 
 def save(source, data):
@@ -256,6 +278,8 @@ class H(BaseHTTPRequestHandler):
                                    "running_headless": BROWSER["headless"], "wanted_headless": load_config()["browser_headless"],
                                    "pid": BROWSER["pid"] if age < 20 else None,
                                    "cleaner_up": time.time() - CLEANER["ts"] < 30, "chrome": CLEANER["chrome"] if time.time() - CLEANER["ts"] < 30 else []})
+        if u.path == "/api/claude":
+            return self.send(200, claude_rows(float(q.get("hours", ["0"])[0])))
         if u.path == "/api/settings":
             return self.send(200, {"settings": load_config(), "db": db_stats(), "file": "general_computer_settings.json"})
         if u.path == "/api/samples":
@@ -273,6 +297,12 @@ class H(BaseHTTPRequestHandler):
             try:
                 n = int(self.headers.get("Content-Length", 0))
                 return self.send(200, {"settings": update_config(json.loads(self.rfile.read(n)))})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
+        if self.path == "/api/claude":
+            try:
+                save_claude(json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0)))))
+                return self.send(200, {"ok": True})
             except Exception as e:
                 return self.send(400, {"error": str(e)})
         if self.path == "/api/cleaner/heartbeat":
