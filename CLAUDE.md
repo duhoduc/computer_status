@@ -24,3 +24,7 @@
 ## Project
 - Layout: `app/` dashboard server (port 8765, Docker) · `agent/` local jobs (`local.js` cleaner+collector supervisor, `live_collector.ps1`, `push_status.ps1`) · `browser/` remote Playwright server (`server.js`, start/restart scripts) · `config/` settings JSON · `scripts/` scheduled-task installers · `docs/` · `logs/` (gitignored) · `ubuntu_client/`.
 - Ubuntu must reach the server via the Windows LAN IP, not `localhost`.
+
+## Per-machine scope
+- Fixes and changes are machine-specific, keyed by computer name (`hostname`). Apply a change only for the machine it was requested for (this one, unless told otherwise) and don't modify behavior, config, or scripts for other machines.
+- Put machine-specific logic/config behind a hostname check or a per-machine entry in `config/`; leave other machines' entries untouched.
