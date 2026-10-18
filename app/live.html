@@ -70,6 +70,7 @@
     <div class="card"><h2><span>Top 10 RAM</span><span class="stats" style="margin:0">working set, grouped by name</span></h2><table class="pt" id="t-ram"></table></div>
   </div>
   <div class="card" style="margin-top:12px"><h2><span>Chromium processes</span><span class="stats" style="margin:0" id="ch-sum"></span></h2><table class="pt" id="t-chrome"></table></div>
+</div>
 <div id="tab-claude" class="pane" hidden>
   <div class="card"><h2><span>Claude Code usage in this folder</span><span class="stats" style="margin:0" id="cl-sub"></span></h2>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
@@ -83,7 +84,7 @@
     <div class="card"><h2><span>Tokens per sample</span><span id="cl2-v" class="big"></span></h2><canvas id="cl2-c"></canvas></div>
   </div>
   <div class="card" style="margin-top:12px"><h2><span>By model</span></h2><table class="pt" id="cl-models"></table></div>
-</div></div></div>
+</div></div>
 <style>
 .shell{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;align-items:start}
 #tabs{display:flex;flex-direction:column;gap:6px;position:sticky;top:16px}
@@ -135,7 +136,7 @@ function clRender(){
   const f=METRICS[document.getElementById('cl-metric').value],rows=clRows;
   const cum=rows.map(r=>({ts:r.ts,v:f(r)})),del=cum.map((p,i)=>({ts:p.ts,v:i?Math.max(0,p.v-cum[i-1].v):0})).slice(1);
   const w=WIN;WIN=0;
-  try{draw({id:'cl1',color:'--ram',max:null,fmt:nf,val:p=>p.v},cum);draw({id:'cl2',color:'--cpu',max:null,fmt:nf,val:p=>p.v},del)}finally{WIN=w}
+  try{draw({id:'cl1',color:'--ram',max:null,fmt:nf,axfmt:nf,val:p=>p.v},cum);draw({id:'cl2',color:'--cpu',max:null,fmt:nf,axfmt:nf,val:p=>p.v},del)}finally{WIN=w}
   document.getElementById('cl1-v').textContent=cum.length?nf(cum[cum.length-1].v):'n/a';
   document.getElementById('cl2-v').textContent=del.length?nf(del[del.length-1].v):'n/a';
 }
@@ -215,7 +216,7 @@ function draw(c,hist){
   const unit=c.fmt(1).replace(/^[\d.]+\s*/,'');
   x.font='10px sans-serif';x.fillStyle=css('--mut');x.textBaseline='middle';x.textAlign='right';
   for(let i=0;i<=4;i++){const y=h*i/4;x.strokeStyle=css('--grid');x.lineWidth=1;x.beginPath();x.moveTo(L,y);x.lineTo(W,y);x.stroke();
-    x.fillText((max*(4-i)/4).toFixed(max<20?1:0),L-4,Math.min(Math.max(y,6),h-2))}
+    x.fillText(c.axfmt?c.axfmt(max*(4-i)/4):(max*(4-i)/4).toFixed(max<20?1:0),L-4,Math.min(Math.max(y,6),h-2))}
   x.textAlign='left';x.fillText(unit,2,h+8);
   const t1=Date.now()/1000,t0=WIN?t1-WIN:(hist.length?hist[0].ts:t1),span=Math.max(1,t1-t0);
   const fmtT=t=>{const d=new Date(t*1000);return span>86400?d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:span<600?'2-digit':undefined})};
@@ -226,7 +227,7 @@ function draw(c,hist){
   x.beginPath();let started=false;
   vals.forEach((v,i)=>{if(v==null)return;started?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v));started=true});
   x.strokeStyle=css(c.color);x.lineWidth=1.6;x.stroke();
-  x.lineTo(L+w,h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
+  x.lineTo(px(vals.reduce((m,v,i)=>v!=null?i:m,0)),h);x.lineTo(px(vals.findIndex(v=>v!=null)),h);x.globalAlpha=.12;x.fillStyle=css(c.color);x.fill();x.globalAlpha=1;
 }
 let WIN=60,SPAN=86400; // window length (s); history span (s)
 const wn=document.getElementById('w-num'),wu=document.getElementById('w-unit');
