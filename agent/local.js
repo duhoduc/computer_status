@@ -63,8 +63,9 @@ function scan() {
   });
 }
 // ---- collector supervisor: restart live_collector.ps1 whenever it exits ----
+let collectorProc = null;
 function startCollector() {
-  const c = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', path.join(__dirname, 'live_collector.ps1')],
+  const c = collectorProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', path.join(__dirname, 'live_collector.ps1')],
     { windowsHide: true, stdio: 'ignore' });
   log(`collector started pid ${c.pid}`);
   c.on('exit', code => { log(`collector exited (${code}); restarting in 5s`); setTimeout(startCollector, 5000); });
@@ -87,3 +88,29 @@ async function claudeTick() {
   await fetch(`${APP}/api/claude`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t), signal: AbortSignal.timeout(5000) }).catch(() => {});
 }
 claudeTick(); setInterval(claudeTick, 15000);
+
+// ---- Rebuild control: the dashboard (inside Docker) can't rebuild itself, so this host-side process does it ----
+// POST /rebuild starts `docker compose up -d --build` (+ restarts the collector); GET /status reports progress.
+// Runs on its own port so the dashboard page can keep polling it while the app container is down.
+const http = require('http');
+const REBUILD_PORT = 8766;
+const ROOT = path.join(__dirname, '..');
+let rb = { state: 'idle', started: 0, finished: 0, tail: '' };
+function rebuild() {
+  if (rb.state === 'rebuilding') return;
+  rb = { state: 'rebuilding', started: Date.now(), finished: 0, tail: '' };
+  log('rebuild: docker compose up -d --build');
+  execFile('docker', ['compose', 'up', '-d', '--build'], { cwd: ROOT, windowsHide: true, maxBuffer: 32e6, timeout: 15 * 60000 }, (err, out, errout) => {
+    rb = { state: err ? 'failed' : 'done', started: rb.started, finished: Date.now(), tail: String(errout || out || (err && err.message) || '').split('\n').slice(-8).join('\n') };
+    log(`rebuild ${rb.state}`);
+    if (!err && collectorProc) collectorProc.kill();   // supervisor restarts it with the new live_collector.ps1
+  });
+}
+http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const u = req.url.split('?')[0];
+  if (req.method === 'POST' && u === '/rebuild') rebuild();
+  else if (!(req.method === 'GET' && u === '/status')) { res.statusCode = 404; return res.end('{}'); }
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(rb));
+}).on('error', e => log(`rebuild endpoint: ${e.message}`)).listen(REBUILD_PORT, '0.0.0.0');
