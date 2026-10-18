@@ -5,6 +5,7 @@ from urllib.parse import urlparse, parse_qs
 
 DB_PATH = os.environ.get("DB_PATH", "status.db")
 PORT = int(os.environ.get("PORT", "8765"))
+MACHINE = os.environ.get("MACHINE", "").upper()  # host computer name (from docker-compose)
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "general_computer_settings.json")
 BROWSER = {"ts": 0, "endpoint": None, "headless": None, "pid": None}
 CLEANER = {"ts": 0, "chrome": []}  # last heartbeat from the host-side agent/local.js
@@ -286,7 +287,9 @@ class H(BaseHTTPRequestHandler):
             since = float(q["since"][0]) if "since" in q else None
             return self.send(200, samples(float(q.get("hours", ["24"])[0]), since, points=int(q.get("points", ["0"])[0])))
         if u.path in ("/", "/live"):
-            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "live.html"), "rb") as f:
+            here = os.path.dirname(os.path.abspath(__file__))
+            page = os.path.join(here, f"live_{MACHINE}.html")  # machine-specific variant wins
+            with open(page if os.path.exists(page) else os.path.join(here, "live.html"), "rb") as f:
                 return self.send(200, f.read(), "text/html; charset=utf-8")
         if u.path == "/status":
             return self.send(200, PAGE, "text/html; charset=utf-8")

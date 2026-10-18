@@ -13,7 +13,7 @@ Windows agent (agent/*.ps1) --POST /api/live, /api/status--> Docker app (app/app
 1. **Agents collect.** `agent/live_collector.ps1` posts a sample about every second to `/api/live`. `agent/push_status.ps1` posts a snapshot to `/api/status`.
 2. **The app stores.** It keeps the last ~15 minutes of live samples in memory. It writes one sample per `sample_interval_s` to SQLite, and deletes rows older than `retention_days`. It also samples its own WSL VM.
 3. **Clients read.** The dashboard (`/`) and the Ubuntu client read `/api/live`, `/api/samples`, `/api/history` and `/api/status`.
-4. **Settings** live in `config/general_computer_settings.json`. Change them via `POST /api/settings` or edit the file. The file is per machine and not in git (a new machine gets defaults automatically; see `config/general_computer_settings.example.json`).
+4. **Settings** live in `config/general_computer_settings.json`. Change them via `POST /api/settings` or edit the file.
 
 ## Run
 
@@ -51,3 +51,7 @@ Read it with: `docker exec computer-status tail -n 50 /data/access.log`
 ## Privacy and git
 
 `.gitignore` excludes logs, databases, keys and tokens. Never commit them. Client IPs and hostnames are sensitive.
+
+## Machine-specific fixes
+
+Shared code and `config/general_computer_settings.json` are common to all machines. If one machine needs its own fix, add `<name>_<COMPUTERNAME>.<ext>` beside the original (for example `browser/server_QAT-805.js`, `agent/local_QAT-805.js`, `agent/live_collector_QAT-805.ps1`, `app/app_QAT-805.py`, `app/live_QAT-805.html`). The start scripts, the task registrars, `local.js`, and the Docker image pick the variant for the machine they run on and fall back to the original. Other machines never see it. Re-run the matching `scripts/register-*.ps1` (or rebuild Docker) after adding a variant.

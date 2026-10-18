@@ -5,8 +5,11 @@
 # will NOT show a window on your desktop. Use register-browser.ps1 if you need that.
 
 $Base = Split-Path $PSScriptRoot   # repo root
+function Pick($f) {  # machine-specific variant: name_<COMPUTERNAME>.ext wins over name.ext
+  $i = Get-Item $f; $c = Join-Path $i.DirectoryName ($i.BaseName + '_' + $env:COMPUTERNAME.ToUpper() + $i.Extension)
+  if (Test-Path $c) { $c } else { $f } }
 $action = New-ScheduledTaskAction -Execute 'conhost.exe' `
-    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Base\browser\start-server.ps1`"" `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Pick "$Base\browser\start-server.ps1")`"" `
     -WorkingDirectory $Base
 # Start at boot, plus a watchdog every 5 minutes that restarts the task if it stopped
 $watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)

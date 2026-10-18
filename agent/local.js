@@ -5,6 +5,8 @@
 // as dead, counts DEAD_GRACE_S down to 0 and kills them. Reports to the dashboard. Does nothing destructive while
 // the browser server is down/restarting (its pid is unknown then, so nothing is judged dead).
 const path = require('path');
+const MACHINE = (process.env.COMPUTERNAME || require('os').hostname()).toUpperCase();
+const pick = f => { const q = path.parse(f), c = path.join(q.dir, `${q.name}_${MACHINE}${q.ext}`); return require('fs').existsSync(c) ? c : f; };  // name_<MACHINE>.ext wins
 const { execFile, spawn } = require('child_process');
 
 const APP = 'http://localhost:8765';
@@ -65,7 +67,7 @@ function scan() {
 // ---- collector supervisor: restart live_collector.ps1 whenever it exits ----
 let collectorProc = null;
 function startCollector() {
-  const c = collectorProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', path.join(__dirname, 'live_collector.ps1')],
+  const c = collectorProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', pick(path.join(__dirname, 'live_collector.ps1'))],
     { windowsHide: true, stdio: 'ignore' });
   log(`collector started pid ${c.pid}`);
   c.on('exit', code => { log(`collector exited (${code}); restarting in 5s`); setTimeout(startCollector, 5000); });
@@ -73,7 +75,7 @@ function startCollector() {
 
 // ---- keep remote-browser windows at the bottom of the z-order (see keep_bottom.ps1) ----
 function startKeepBottom() {
-  const c = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', path.join(__dirname, 'keep_bottom.ps1')],
+  const c = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', pick(path.join(__dirname, 'keep_bottom.ps1'))],
     { windowsHide: true, stdio: 'ignore' });
   log(`keep_bottom started pid ${c.pid}`);
   c.on('exit', code => { log(`keep_bottom exited (${code}); restarting in 5s`); setTimeout(startKeepBottom, 5000); });

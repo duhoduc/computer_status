@@ -26,5 +26,3 @@ browsers/
 node/
 node_modules/
 
-# per-machine settings (each machine keeps its own copy; see config/general_computer_settings.example.json)
-config/general_computer_settings.json

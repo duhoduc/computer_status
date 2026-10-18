@@ -5,8 +5,11 @@
 $Base = Split-Path $PSScriptRoot   # repo root
 $User = "$env:USERDOMAIN\$env:USERNAME"
 
+function Pick($f) {  # machine-specific variant: name_<COMPUTERNAME>.ext wins over name.ext
+  $i = Get-Item $f; $c = Join-Path $i.DirectoryName ($i.BaseName + '_' + $env:COMPUTERNAME.ToUpper() + $i.Extension)
+  if (Test-Path $c) { $c } else { $f } }
 $action = New-ScheduledTaskAction -Execute 'conhost.exe' `
-    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Base\agent\push_status.ps1`"" `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Pick "$Base\agent\push_status.ps1")`"" `
     -WorkingDirectory $Base
 $every = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
 $trigger = @((New-ScheduledTaskTrigger -AtLogOn -User $User), $every)

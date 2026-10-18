@@ -9,6 +9,7 @@ services:
       - ./data:/data          # status.db + access.log live in the repo's data/ folder (gitignored)
       - ./config:/config      # per-machine settings file lives here (untracked); the app creates it with defaults if missing
     environment:
+      MACHINE: ${COMPUTERNAME:-}   # host name: selects app_<MACHINE>.py / live_<MACHINE>.html if present
       CONFIG_PATH: /config/general_computer_settings.json
       ACCESS_LOG_PATH: /data/access.log   # in data/, gitignored
     healthcheck:

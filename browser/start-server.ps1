@@ -18,12 +18,15 @@ if ((Test-Path $Log) -and (Get-Item $Log).Length -gt 10MB) {
 # A stray Ctrl+C on this hidden console must not kill the restart loop
 try { [Console]::TreatControlCAsInput = $true } catch {}
 
+function Pick($f) {  # machine-specific variant: name_<COMPUTERNAME>.ext wins over name.ext
+  $i = Get-Item $f; $c = Join-Path $i.DirectoryName ($i.BaseName + '_' + $env:COMPUTERNAME.ToUpper() + $i.Extension)
+  if (Test-Path $c) { $c } else { $f } }
 Set-Location $Base
 while ($true) {
     Write-Log 'Starting server.js'
     $Node = Join-Path $Base 'node\node.exe'   # portable Node if present, else the system one
     if (-not (Test-Path $Node)) { $Node = (Get-Command node -ErrorAction SilentlyContinue).Source }
-    & $Node (Join-Path $Base 'browser\server.js') *>> $Log
+    & $Node (Pick (Join-Path $Base 'browser\server.js')) *>> $Log
     Write-Log "server.js exited with code $LASTEXITCODE; restarting in 5s"
     Start-Sleep -Seconds 5
 }
