@@ -1,5 +1,6 @@
-# Keeps every Playwright Chromium window (the remote browser, headless=false) at the BOTTOM of the z-order,
-# so a remote client opening a page never covers the window you are working in. Polls every 250 ms.
+﻿# Keeps every Playwright Chromium window (the remote browser, headless=false) at the BOTTOM of the z-order,
+# so a remote client opening a page never covers the window you are working in.
+# Each window is pushed to the bottom ONCE, when first seen; afterwards it is left alone.
 param([string]$BrowsersDir = (Join-Path (Split-Path $PSScriptRoot) 'browsers'))
 Add-Type -TypeDefinition @'
 using System;
@@ -17,6 +18,7 @@ public static class ChromeBottom {
   [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h, int flags, StringBuilder s, ref int n);
+  static HashSet<IntPtr> done = new HashSet<IntPtr>();
   static Dictionary<uint, bool> ours = new Dictionary<uint, bool>();
   static bool Ours(uint pid, string dir) {
     bool r; if (ours.TryGetValue(pid, out r)) return r;
@@ -36,7 +38,9 @@ public static class ChromeBottom {
       if (cn.ToString() == "Chrome_WidgetWin_1" && Ours(pid, dir)) list.Add(h);
       return true; }, IntPtr.Zero);
     if (ours.Count > 2000) ours.Clear();
+    done.RemoveWhere(x => !list.Contains(x));   // forget closed windows
     foreach (var h in list) {
+      if (!done.Add(h)) continue;   // already pushed once
       // already at the bottom if every visible window below it is also one of ours
       bool bottom = true; for (IntPtr n = GetWindow(h, 2); n != IntPtr.Zero; n = GetWindow(n, 2)) if (IsWindowVisible(n) && !list.Contains(n)) { bottom = false; break; }
       if (bottom) continue;

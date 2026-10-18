@@ -1,4 +1,4 @@
-// Local-machine jobs in one process: runs/supervises the live metrics collector (live_collector.ps1) and the
+﻿// Local-machine jobs in one process: runs/supervises the live metrics collector (live_collector.ps1) and the
 // chromium cleaner. Separate from server.js (the remote browser), so restarting one never touches the other.
 //
 // Cleaner: lists the Playwright chromium processes, marks orphans (not descended from the live browser server)
@@ -74,8 +74,9 @@ function startCollector() {
 }
 
 // ---- keep remote-browser windows at the bottom of the z-order (see keep_bottom.ps1) ----
+let keepBottomProc = null;
 function startKeepBottom() {
-  const c = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', pick(path.join(__dirname, 'keep_bottom.ps1'))],
+  const c = keepBottomProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', pick(path.join(__dirname, 'keep_bottom.ps1'))],
     { windowsHide: true, stdio: 'ignore' });
   log(`keep_bottom started pid ${c.pid}`);
   c.on('exit', code => { log(`keep_bottom exited (${code}); restarting in 5s`); setTimeout(startKeepBottom, 5000); });
@@ -115,7 +116,8 @@ function rebuild() {
   execFile('docker', ['compose', 'up', '-d', '--build'], { cwd: ROOT, windowsHide: true, maxBuffer: 32e6, timeout: 15 * 60000 }, (err, out, errout) => {
     rb = { state: err ? 'failed' : 'done', started: rb.started, finished: Date.now(), tail: String(errout || out || (err && err.message) || '').split('\n').slice(-8).join('\n') };
     log(`rebuild ${rb.state}`);
-    if (!err && collectorProc) collectorProc.kill();   // supervisor restarts it with the new live_collector.ps1
+    if (!err && collectorProc) collectorProc.kill();
+    if (!err && keepBottomProc) keepBottomProc.kill();   // also restart keep_bottom so it runs the new script   // supervisor restarts it with the new live_collector.ps1
   });
 }
 http.createServer((req, res) => {
