@@ -28,3 +28,4 @@
 ## Per-machine scope
 - Fixes and changes are machine-specific, keyed by computer name (`hostname`). Apply a change only for the machine it was requested for (this one, unless told otherwise) and don't modify behavior, config, or scripts for other machines.
 - Put machine-specific logic/config behind a hostname check or a per-machine entry in `config/`; leave other machines' entries untouched.
+- Two machines share this repo/service. Per-machine settings (`config/general_computer_settings.json`: headless toggle, sample intervals, power model) are untracked and local: edit them only on the machine they belong to; never commit them. Shared defaults live in `config/general_computer_settings.example.json`. Runtime data (`data/`, `logs/`) is likewise local and gitignored.
