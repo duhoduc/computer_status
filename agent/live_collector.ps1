@@ -12,6 +12,24 @@ $nvidia = [bool](Get-Command nvidia-smi -ErrorAction SilentlyContinue)
 $settingsFile = Join-Path $PSScriptRoot "..\general_computer_settings.json"
 $cpuIdleW = 25; $cpuMaxW = 120; $otherW = 40   # fallbacks; overridden by general_computer_settings.json
 $loop = 0
+$prevCpu = @{}; $prevT = [datetime]::UtcNow; $ncpu = [Environment]::ProcessorCount; $top = $null
+
+function Get-TopProcs {  # per-process-name CPU% (delta of CPU seconds) and RAM, top 10 each
+  $now = [datetime]::UtcNow; $dt = [math]::Max(0.1, ($now - $script:prevT).TotalSeconds); $script:prevT = $now
+  $cur = @{}; $rows = @{}
+  foreach ($p in (Get-Process | Where-Object { $_.Id -ne 0 })) {
+    $c = 0.0; try { $c = $p.TotalProcessorTime.TotalSeconds } catch {}
+    $cur[$p.Id] = $c
+    $d = 0.0; if ($script:prevCpu.ContainsKey($p.Id)) { $d = [math]::Max(0, $c - $script:prevCpu[$p.Id]) }
+    $n = $p.ProcessName
+    if (-not $rows.ContainsKey($n)) { $rows[$n] = @{ name = $n; count = 0; cpu = 0.0; mem_mb = 0.0 } }
+    $r = $rows[$n]; $r.count++; $r.cpu += $d; $r.mem_mb += $p.WorkingSet64 / 1MB
+  }
+  $script:prevCpu = $cur
+  foreach ($r in $rows.Values) { $r.cpu = [math]::Round(100 * $r.cpu / $dt / $script:ncpu, 1); $r.mem_mb = [math]::Round($r.mem_mb) }
+  @{ cpu = @($rows.Values | Sort-Object { $_.cpu } -Descending | Select-Object -First 10)
+     ram = @($rows.Values | Sort-Object { $_.mem_mb } -Descending | Select-Object -First 10) }
+}
 
 $counters = @(
   '\Processor Information(*)\% Processor Utility',
@@ -57,6 +75,7 @@ while ($true) {
       try { $pm = (Get-Content $settingsFile -Raw | ConvertFrom-Json).power_model
             $cpuIdleW = $pm.cpu_idle_w; $cpuMaxW = $pm.cpu_max_w; $otherW = $pm.other_w } catch {}
     }
+    if (($loop % 3) -eq 1 -or -not $top) { $top = Get-TopProcs }  # every ~3s; Get-Process is heavy
     $s = (Get-Counter -Counter $counters -ErrorAction SilentlyContinue).CounterSamples
     $val = { param($pat) ($s | Where-Object { $_.Path -like $pat } | Select-Object -First 1).CookedValue }
     $sum = { param($pat) ($s | Where-Object { $_.Path -like $pat -and $_.Path -notlike '*_total*' -and $_.Path -notlike '*isatap*' -and $_.Path -notlike '*loopback*' } | Measure-Object CookedValue -Sum).Sum }
@@ -81,6 +100,7 @@ while ($true) {
                   committed_mb = [math]::Round((& $val '*memory\committed bytes') / 1MB)
                   cached_mb = [math]::Round((& $val '*memory\cache bytes') / 1MB) }
       gpu = $gpu
+      top_cpu = $top.cpu; top_ram = $top.ram
       disk = @{ active_percent = [math]::Round([math]::Min(100, (& $val '*physicaldisk(_total)*% disk time')), 1)
                 read_mbps = [math]::Round((& $val '*physicaldisk(_total)*disk read bytes/sec') / 1MB, 2)
                 write_mbps = [math]::Round((& $val '*physicaldisk(_total)*disk write bytes/sec') / 1MB, 2) }

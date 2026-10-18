@@ -40,7 +40,8 @@
 .led{flex:none;display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-right:6px}
 .led.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.led.off{background:#e74c3c;box-shadow:0 0 6px #e74c3c}
 </style>
-<div class="layout">
+<div class="shell"><nav id="tabs"><button data-t="computer" class="on">Computer</button><button data-t="proc">Processes</button></nav><div class="panes">
+<div id="tab-computer" class="pane"><div class="layout">
 <main><div class="grid" id="g"></div></main>
 <aside class="card" id="settings">
   <h2><span>Settings</span><span class="stats" style="margin:0" id="sfile"></span></h2>
@@ -60,7 +61,56 @@
   <h3>Database</h3>
   <div class="stats" id="dbstats"></div>
 </aside>
-</div>
+</div></div>
+<div id="tab-proc" class="pane" hidden>
+  <div class="grid2">
+    <div class="card"><h2><span>Top 10 CPU</span><span class="stats" style="margin:0">% of all cores, grouped by name</span></h2><table class="pt" id="t-cpu"></table></div>
+    <div class="card"><h2><span>Top 10 RAM</span><span class="stats" style="margin:0">working set, grouped by name</span></h2><table class="pt" id="t-ram"></table></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h2><span>Chromium processes</span><span class="stats" style="margin:0" id="ch-sum"></span></h2><table class="pt" id="t-chrome"></table></div>
+</div></div></div>
+<style>
+.shell{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;align-items:start}
+#tabs{display:flex;flex-direction:column;gap:6px;position:sticky;top:16px}
+#tabs button{padding:9px 12px;border:0;border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;text-align:left;box-shadow:0 1px 2px #0002}
+#tabs button.on{background:var(--cpu);color:#fff}
+.pane[hidden]{display:none}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:700px){.grid2{grid-template-columns:1fr}.shell{grid-template-columns:1fr}#tabs{flex-direction:row;position:static}}
+.pt{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+.pt th,.pt td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--grid)}
+.pt td.n,.pt th.n{text-align:right;font-variant-numeric:tabular-nums}
+.pt .bar{display:block;height:4px;border-radius:2px;margin-top:3px}
+.st-running{color:#16a34a}.st-dead{color:var(--pow);font-weight:600}
+</style>
+<script>
+for(const b of document.querySelectorAll('#tabs button'))b.onclick=()=>{
+  for(const x of document.querySelectorAll('#tabs button'))x.classList.toggle('on',x===b);
+  document.getElementById('tab-computer').hidden=b.dataset.t!=='computer';
+  document.getElementById('tab-proc').hidden=b.dataset.t!=='proc';
+  try{localStorage.tab=b.dataset.t}catch(e){}
+  if(b.dataset.t==='computer')tick();
+};
+try{const t=document.querySelector(`#tabs button[data-t="${localStorage.tab}"]`);if(t)t.click()}catch(e){}
+const esc=v=>String(v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function topTable(id,rows,key,fmt,color){
+  const m=Math.max(1e-9,...rows.map(r=>r[key]));
+  document.getElementById(id).innerHTML='<tr><th>Process</th><th class="n">#</th><th class="n">'+(key==='cpu'?'CPU':'RAM')+'</th></tr>'+
+    rows.map(r=>`<tr><td>${esc(r.name)}<i class="bar" style="width:${(100*r[key]/m).toFixed(0)}%;background:var(${color})"></i></td><td class="n">${r.count}</td><td class="n">${fmt(r[key])}</td></tr>`).join('');
+}
+async function procTick(){
+  if(document.getElementById('tab-proc').hidden)return;
+  try{
+    const d=await (await fetch('/api/live?n=1')).json(),s=d.latest;
+    if(s){topTable('t-cpu',s.top_cpu||[],'cpu',v=>v.toFixed(1)+'%','--cpu');topTable('t-ram',s.top_ram||[],'mem_mb',v=>v>=1024?(v/1024).toFixed(2)+' GB':v+' MB','--ram')}
+    const b=await (await fetch('/api/browser',{cache:'no-store'})).json(),c=b.chrome||[],dead=c.filter(x=>x.status==='dead').length;
+    document.getElementById('ch-sum').textContent=`${c.length} total · ${c.length-dead} running · ${dead} dead`;
+    document.getElementById('t-chrome').innerHTML='<tr><th>PID</th><th>Status</th><th class="n">Counter (s to cleanup)</th><th class="n">RAM</th></tr>'+
+      (c.length?c.map(x=>`<tr><td>${x.pid}</td><td class="st-${x.status}">${x.status}</td><td class="n">${x.counter==null?'-':x.counter}</td><td class="n">${x.mem_mb} MB</td></tr>`).join(''):'<tr><td colspan="4" class="stats">no chromium processes (browser service down?)</td></tr>');
+  }catch(e){}
+}
+procTick();setInterval(procTick,2000);
+</script>
 <script>
 async function loadSettings(fillInputs){
   const d=await (await fetch('/api/settings')).json(),s=d.settings,b=d.db;
