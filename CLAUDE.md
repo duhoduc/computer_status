@@ -15,7 +15,7 @@
 - Never commit secrets (keys, tokens, `.env`, `*.db`).
 
 ## Rebuild after changes
-- Always rebuild/restart every job whose code was modified so it runs the up-to-date code: Docker app (`docker compose up -d --build`), `server.js` (`restart-server.ps1`), Windows collector/push agents (re-run their register/restart scripts).
+- Always rebuild/restart every job whose code was modified so it runs the up-to-date code: Docker app (`docker compose up -d --build`), `server.js` (`restart-server.ps1`), Windows collector/push agents (re-run their `register-local.ps1` for the local jobs).
 - Do this before the commit/push step and confirm each job is running.
 
 ## Project

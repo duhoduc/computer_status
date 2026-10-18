@@ -7,7 +7,7 @@ Stop-ScheduledTask -TaskName 'PlaywrightServer' -ErrorAction SilentlyContinue
 
 # Stop any leftover launcher / node / Chrome processes started from this folder
 Get-CimInstance Win32_Process |
-    Where-Object { $_.CommandLine -like "*$Base*" -and $_.CommandLine -notlike '*live_collector*' -and $_.CommandLine -notlike '*chrome_cleaner*' -and $_.CommandLine -notlike '*start-cleaner*' -and $_.ProcessId -ne $PID } |
+    Where-Object { $_.CommandLine -like "*$Base*" -and $_.CommandLine -notlike '*live_collector*' -and $_.CommandLine -notlike '*chrome_cleaner*' -and $_.CommandLine -notlike '*start-local*' -and $_.ProcessId -ne $PID } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 2
 
