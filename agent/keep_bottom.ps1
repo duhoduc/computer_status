@@ -1,5 +1,6 @@
 # Keeps every Playwright Chromium window (the remote browser, headless=false) at the BOTTOM of the z-order,
-# so a remote client opening a page never covers the window you are working in. Polls every 250 ms.
+# so a remote client opening a page never covers the window you are working in. Polls every 250 ms, but each
+# window is pushed only once, when it first appears (afterwards you may raise it freely).
 param([string]$BrowsersDir = (Join-Path (Split-Path $PSScriptRoot) 'browsers'))
 Add-Type -TypeDefinition @'
 using System;
@@ -26,23 +27,22 @@ public static class ChromeBottom {
       CloseHandle(h); }
     ours[pid] = r; return r;
   }
-  // Moves our visible Chromium top-level windows to the bottom, but only those that are NOT already there.
-  // EnumWindows walks the z-order top to bottom; a window of ours needs a push only if some foreign window
-  // (anything but the desktop's Progman/WorkerW) lies below it. Returns how many were moved.
+  // Each Chromium window is pushed to the bottom exactly ONCE, when it first appears. After that it is left alone,
+  // so you can bring it forward to look at it. Returns how many new windows were pushed.
+  static HashSet<IntPtr> handled = new HashSet<IntPtr>();
   public static int Sweep(string dir) {
-    int moved = 0; var order = new List<IntPtr>(); var isOurs = new List<bool>(); int lastForeign = -1;
+    int moved = 0; var now = new List<IntPtr>();
     EnumWindows((h, l) => {
       if (!IsWindowVisible(h)) return true;
-      var cn = new StringBuilder(64); GetClassName(h, cn, 64); string c = cn.ToString();
+      var cn = new StringBuilder(64); GetClassName(h, cn, 64);
       uint pid; GetWindowThreadProcessId(h, out pid);
-      bool mine = c == "Chrome_WidgetWin_1" && Ours(pid, dir);
-      if (!mine && c != "Progman" && c != "WorkerW") lastForeign = order.Count;
-      order.Add(h); isOurs.Add(mine);
+      if (cn.ToString() == "Chrome_WidgetWin_1" && Ours(pid, dir)) now.Add(h);
       return true; }, IntPtr.Zero);
     if (ours.Count > 2000) ours.Clear();
-    for (int i = 0; i < order.Count && i < lastForeign; i++) {
-      if (!isOurs[i]) continue;
-      SetWindowPos(order[i], (IntPtr)1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);  // HWND_BOTTOM; NOSIZE|NOMOVE|NOACTIVATE
+    handled.IntersectWith(now);   // forget closed windows (their handles may be reused later)
+    foreach (var h in now) {
+      if (!handled.Add(h)) continue;
+      SetWindowPos(h, (IntPtr)1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);  // HWND_BOTTOM; NOSIZE|NOMOVE|NOACTIVATE
       moved++; }
     return moved;
   }

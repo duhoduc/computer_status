@@ -29,7 +29,7 @@ Windows agent (agent/*.ps1) --POST /api/live, /api/status--> Docker app (app/app
 
 ## Remote browser windows stay in the background
 
-With `browser_headless: false` the remote Chromium shows real windows. `agent/keep_bottom.ps1` (supervised by `agent/local.js`) pushes them to the bottom of the z-order every 250 ms, so a remote client opening a page never covers your current window. Pages keep running normally. A window may flash on top for up to ~250 ms, and keyboard focus can still move briefly.
+With `browser_headless: false` the remote Chromium shows real windows. `agent/keep_bottom.ps1` (supervised by `agent/local.js`) pushes each one to the bottom of the z-order once, when it first appears (it checks every 250 ms), so a remote client opening a page never covers your current window. Pages keep running normally. A window may flash on top for up to ~250 ms, and keyboard focus can still move briefly.
 
 ## Always on?
 
