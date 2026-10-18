@@ -21,6 +21,12 @@ Windows agent (agent/*.ps1) --POST /api/live, /api/status--> Docker app (app/app
 - Dashboard: http://localhost:8765 (other computers use `http://<WINDOWS_IP>:8765`, and Windows Firewall must allow TCP 8765)
 - Ubuntu: `python3 ubuntu_client/sync_from_windows.py http://<WINDOWS_IP>:8765`
 
+## Remote access over Tailscale
+
+- Open `http://<tailscale-ip>:8765` (this PC: `http://100.96.25.96:8765`, or its MagicDNS name) from any machine on your tailnet. The Rebuild button works there too: it talks to the agent on port 8766 of the same host.
+- One-time, as administrator: `scripts/allow-tailscale-admin.ps1` opens TCP 8765 and 8766 to `100.64.0.0/10` only (not the wider LAN or internet).
+- Ports are plain HTTP with no login: anyone on your tailnet can view the dashboard and press Rebuild. Use Tailscale ACLs if that is too open.
+
 ## Always on?
 
 Partly. These layers keep it running:
