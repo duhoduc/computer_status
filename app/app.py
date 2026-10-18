@@ -7,7 +7,7 @@ DB_PATH = os.environ.get("DB_PATH", "status.db")
 PORT = int(os.environ.get("PORT", "8765"))
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "general_computer_settings.json")
 BROWSER = {"ts": 0, "endpoint": None, "headless": None, "pid": None}
-CLEANER = {"ts": 0, "chrome": []}  # last heartbeat from the host-side chrome_cleaner.js  # last heartbeat from the host's server.js
+CLEANER = {"ts": 0, "chrome": []}  # last heartbeat from the host-side agent/local.js
 DEFAULTS = {"sample_interval_s": 30, "retention_days": 30, "browser_headless": False,
             "power_model": {"cpu_idle_w": 25, "cpu_max_w": 120, "other_w": 40}}
 LIMITS = {"sample_interval_s": (1, 3600), "retention_days": (1, 3650)}

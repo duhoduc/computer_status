@@ -1,8 +1,9 @@
-# Launcher run by the scheduled task "PlaywrightServer".
+﻿# Launcher run by the scheduled task "PlaywrightServer".
 # Runs server.js and restarts it whenever it exits. Output goes to server.log.
 
-$Base = $PSScriptRoot
-$Log  = Join-Path $Base 'server.log'
+$Base = Split-Path $PSScriptRoot   # repo root
+New-Item -ItemType Directory -Force (Join-Path $Base 'logs') | Out-Null
+$Log  = Join-Path $Base 'logs\server.log'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'   # also applies to >> redirection
 
 function Write-Log($msg) {
@@ -22,7 +23,7 @@ while ($true) {
     Write-Log 'Starting server.js'
     $Node = Join-Path $Base 'node\node.exe'   # portable Node if present, else the system one
     if (-not (Test-Path $Node)) { $Node = (Get-Command node -ErrorAction SilentlyContinue).Source }
-    & $Node (Join-Path $Base 'server.js') *>> $Log
+    & $Node (Join-Path $Base 'browser\server.js') *>> $Log
     Write-Log "server.js exited with code $LASTEXITCODE; restarting in 5s"
     Start-Sleep -Seconds 5
 }

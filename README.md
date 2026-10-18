@@ -13,7 +13,7 @@ Windows agent (agent/*.ps1) --POST /api/live, /api/status--> Docker app (app/app
 1. **Agents collect.** `agent/live_collector.ps1` posts a sample about every second to `/api/live`. `agent/push_status.ps1` posts a snapshot to `/api/status`.
 2. **The app stores.** It keeps the last ~15 minutes of live samples in memory. It writes one sample per `sample_interval_s` to SQLite, and deletes rows older than `retention_days`. It also samples its own WSL VM.
 3. **Clients read.** The dashboard (`/`) and the Ubuntu client read `/api/live`, `/api/samples`, `/api/history` and `/api/status`.
-4. **Settings** live in `general_computer_settings.json`. Change them via `POST /api/settings` or edit the file.
+4. **Settings** live in `config/general_computer_settings.json`. Change them via `POST /api/settings` or edit the file.
 
 ## Run
 

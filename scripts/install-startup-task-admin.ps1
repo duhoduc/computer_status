@@ -2,11 +2,11 @@
 # Replaces the logon task with one that runs as SYSTEM at boot, so the server
 # comes up after a reboot even if nobody logs in.
 # NOTE: in this mode Chrome runs in a hidden service session - HEADLESS = false
-# will NOT show a window on your desktop. Use register-task.ps1 if you need that.
+# will NOT show a window on your desktop. Use register-browser.ps1 if you need that.
 
-$Base = $PSScriptRoot
+$Base = Split-Path $PSScriptRoot   # repo root
 $action = New-ScheduledTaskAction -Execute 'conhost.exe' `
-    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Base\start-server.ps1`"" `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Base\browser\start-server.ps1`"" `
     -WorkingDirectory $Base
 # Start at boot, plus a watchdog every 5 minutes that restarts the task if it stopped
 $watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
@@ -21,4 +21,4 @@ Register-ScheduledTask -TaskName 'PlaywrightServer' -Action $action -Trigger $tr
     -Description 'house_browser: Playwright 1.63.0 remote Chrome server over Tailscale' | Out-Null
 Write-Host "Scheduled task 'PlaywrightServer' registered (runs as SYSTEM at boot)."
 
-& (Join-Path $Base 'restart-server.ps1')
+& (Join-Path $Base 'browser\restart-server.ps1')

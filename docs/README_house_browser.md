@@ -12,12 +12,12 @@ A remote Chrome browser server (Playwright **1.63.0**) on this Windows PC. Anoth
 
 | File / folder | Purpose |
 |---|---|
-| `server.js` | **The server. Edit `HEADLESS` and `PORT` here.** |
-| `start-server.ps1` | Launcher run by the scheduled task. Restarts `server.js` if it stops. |
-| `restart-server.ps1` | Restarts the server. Run it after you edit `server.js`. |
-| `register-task.ps1` | Creates or repairs the scheduled task (runs at logon, no admin needed). |
-| `install-startup-task-admin.ps1` | Optional, needs admin. Starts the server at boot, before anyone logs in. |
-| `server.log` | Server log. |
+| `browser/server.js` | **The server. Edit `HEADLESS` and `PORT` here.** |
+| `browser/start-server.ps1` | Launcher run by the scheduled task. Restarts `browser/server.js` if it stops. |
+| `browser/restart-server.ps1` | Restarts the server. Run it after you edit `browser/server.js`. |
+| `scripts/register-browser.ps1` | Creates or repairs the scheduled task (runs at logon, no admin needed). |
+| `scripts/install-startup-task-admin.ps1` | Optional, needs admin. Starts the server at boot, before anyone logs in. |
+| `logs/server.log` | Server log. |
 | `node\` | Portable Node.js 24 (not installed system-wide). |
 | `node_modules\` | Playwright 1.63.0. |
 | `browsers\` | Chrome, Firefox and WebKit binaries used by Playwright. |
@@ -26,7 +26,7 @@ A remote Chrome browser server (Playwright **1.63.0**) on this Windows PC. Anoth
 
 ## Change headless mode (show or hide the Chrome window)
 
-1. Open `C:\computer_status\server.js` and change the setting at the top:
+1. Open `C:\computer_status\browser\server.js` and change the setting at the top:
 
    ```js
    const HEADLESS = true;    // true = no window, false = Chrome window visible on this PC's desktop
@@ -35,7 +35,7 @@ A remote Chrome browser server (Playwright **1.63.0**) on this Windows PC. Anoth
 2. Save the file, then restart the scheduled task from PowerShell:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File C:\computer_status\restart-server.ps1
+   powershell -ExecutionPolicy Bypass -File C:\computer_status\browser\restart-server.ps1
    ```
 
    The script stops the task and any running server or Chrome processes, starts the task again, and waits for the server. When it's up, you'll see a line like this:
@@ -44,7 +44,7 @@ A remote Chrome browser server (Playwright **1.63.0**) on this Windows PC. Anoth
    2026-10-16 23:10:45  Chrome ready (headless=false) at ws://100.80.61.99:3000/
    ```
 
-The setting is saved in `server.js`, so it stays the same after a reboot or a new login.
+The setting is saved in `browser/server.js`, so it stays the same after a reboot or a new login.
 
 > With `HEADLESS = false` the Chrome window appears on your desktop. **Don't close it by hand.** That stops the server; the launcher starts it again about 5 seconds later.
 
@@ -80,12 +80,12 @@ npx playwright install chromium firefox webkit
 Then create the scheduled task and start the server:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\computer_status\register-task.ps1
+powershell -ExecutionPolicy Bypass -File C:\computer_status\scripts\register-browser.ps1
 ```
 
 This registers `PlaywrightServer` with these settings:
 - **Triggers:** at logon of the current user, with no delay. A watchdog also checks every 5 minutes and starts the task again if it has stopped. It does nothing while the server is running.
-- **Restart:** the launcher restarts `server.js` within 5 s if it stops. Task Scheduler restarts the task every minute if it fails.
+- **Restart:** the launcher restarts `browser/server.js` within 5 s if it stops. Task Scheduler restarts the task every minute if it fails.
 - **Power:** runs on battery and has no time limit.
 
 ### Optional: start at boot without logging in (needs admin)
@@ -93,12 +93,12 @@ This registers `PlaywrightServer` with these settings:
 From an **Administrator** PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\computer_status\install-startup-task-admin.ps1
+powershell -ExecutionPolicy Bypass -File C:\computer_status\scripts\install-startup-task-admin.ps1
 ```
 
 Also turn on **Run unattended** in Tailscale (tray icon â†’ Preferences) so Tailscale connects before anyone logs in.
 
-> In this mode Chrome runs as SYSTEM in a hidden session, so `HEADLESS = false` **doesn't show a window**. To switch back to the logon task, run `register-task.ps1`.
+> In this mode Chrome runs as SYSTEM in a hidden session, so `HEADLESS = false` **doesn't show a window**. To switch back to the logon task, run `scripts/register-browser.ps1`.
 
 ---
 
@@ -154,7 +154,7 @@ Notes:
 |---|---|
 | Is the task running? | `Get-ScheduledTask PlaywrightServer` (State should be `Running`) |
 | Is the server listening? | `Get-NetTCPConnection -LocalPort 3000 -State Listen` |
-| What happened? | `Get-Content C:\computer_status\server.log -Tail 30` |
+| What happened? | `Get-Content C:\computer_status\logs\server.log -Tail 30` |
 | Tailscale IP of this PC | `& 'C:\Program Files\Tailscale\tailscale.exe' ip -4` |
 | Test from Ubuntu | `nc -zv 100.80.61.99 3000` |
 

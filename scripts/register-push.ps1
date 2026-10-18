@@ -1,8 +1,8 @@
 # (Re)create the scheduled task "ComputerStatusPush": runs agent\push_status.ps1 at logon and every minute.
 # No admin rights needed. Usage:
-#   powershell -ExecutionPolicy Bypass -File C:\computer_status\register-push.ps1
+#   powershell -ExecutionPolicy Bypass -File C:\computer_status\scripts\register-push.ps1
 
-$Base = $PSScriptRoot
+$Base = Split-Path $PSScriptRoot   # repo root
 $User = "$env:USERDOMAIN\$env:USERNAME"
 
 $action = New-ScheduledTaskAction -Execute 'conhost.exe' `

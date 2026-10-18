@@ -15,9 +15,9 @@
 - Never commit secrets (keys, tokens, `.env`, `*.db`).
 
 ## Rebuild after changes
-- Always rebuild/restart every job whose code was modified so it runs the up-to-date code: Docker app (`docker compose up -d --build`), `server.js` (`restart-server.ps1`), Windows collector/push agents (re-run their `register-local.ps1` for the local jobs).
+- Always rebuild/restart every job whose code was modified so it runs the up-to-date code: Docker app (`docker compose up -d --build`), `browser/server.js` (`browser/restart-server.ps1`), Windows collector/push agents (re-run their `scripts/register-local.ps1` for the local jobs).
 - Do this before the commit/push step and confirm each job is running.
 
 ## Project
-- Server: `app/app.py` (port 8765, Docker). Windows agent: `agent/`. Ubuntu client: `ubuntu_client/`.
+- Layout: `app/` dashboard server (port 8765, Docker) · `agent/` local jobs (`local.js` cleaner+collector supervisor, `live_collector.ps1`, `push_status.ps1`) · `browser/` remote Playwright server (`server.js`, start/restart scripts) · `config/` settings JSON · `scripts/` scheduled-task installers · `docs/` · `logs/` (gitignored) · `ubuntu_client/`.
 - Ubuntu must reach the server via the Windows LAN IP, not `localhost`.

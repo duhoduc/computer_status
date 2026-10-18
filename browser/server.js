@@ -1,10 +1,10 @@
 // house_browser - Playwright 1.63.0 remote Chrome server, reachable over Tailscale.
 //
 // Edit the settings below, then restart the scheduled task (see README.md):
-//   powershell -ExecutionPolicy Bypass -File C:\computer_status\restart-server.ps1
+//   powershell -ExecutionPolicy Bypass -File C:\computer_status\browser\restart-server.ps1
 
 // ======================= SETTINGS =======================
-const SETTINGS = require('path').join(__dirname, 'general_computer_settings.json');  // "browser_headless" here; toggled from http://localhost:8765
+const SETTINGS = require('path').join(__dirname, '..', 'config', 'general_computer_settings.json');  // "browser_headless" here; toggled from http://localhost:8765
 const readHeadless = () => { try { return !!JSON.parse(require('fs').readFileSync(SETTINGS, 'utf8')).browser_headless; } catch { return false; } };
 const HEADLESS = readHeadless();   // true = no window, false = Chrome window visible on this PC's desktop
 const APP = 'http://localhost:8765';
@@ -19,7 +19,7 @@ const JANITOR_EVERY_SEC = 60;    // sweep interval
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(__dirname, 'browsers');
+process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(__dirname, '..', 'browsers');
 const { chromium } = require('playwright');
 
 const TAILSCALE = 'C:\\Program Files\\Tailscale\\tailscale.exe';
