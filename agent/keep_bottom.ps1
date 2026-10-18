@@ -26,21 +26,23 @@ public static class ChromeBottom {
       CloseHandle(h); }
     ours[pid] = r; return r;
   }
-  // Moves our visible Chromium top-level windows to the bottom unless already there; returns how many were moved.
+  // Moves our visible Chromium top-level windows to the bottom, but only those that are NOT already there.
+  // EnumWindows walks the z-order top to bottom; a window of ours needs a push only if some foreign window
+  // (anything but the desktop's Progman/WorkerW) lies below it. Returns how many were moved.
   public static int Sweep(string dir) {
-    int moved = 0; var list = new List<IntPtr>();
+    int moved = 0; var order = new List<IntPtr>(); var isOurs = new List<bool>(); int lastForeign = -1;
     EnumWindows((h, l) => {
       if (!IsWindowVisible(h)) return true;
-      var cn = new StringBuilder(64); GetClassName(h, cn, 64);
+      var cn = new StringBuilder(64); GetClassName(h, cn, 64); string c = cn.ToString();
       uint pid; GetWindowThreadProcessId(h, out pid);
-      if (cn.ToString() == "Chrome_WidgetWin_1" && Ours(pid, dir)) list.Add(h);
+      bool mine = c == "Chrome_WidgetWin_1" && Ours(pid, dir);
+      if (!mine && c != "Progman" && c != "WorkerW") lastForeign = order.Count;
+      order.Add(h); isOurs.Add(mine);
       return true; }, IntPtr.Zero);
     if (ours.Count > 2000) ours.Clear();
-    foreach (var h in list) {
-      // already at the bottom if every visible window below it is also one of ours
-      bool bottom = true; for (IntPtr n = GetWindow(h, 2); n != IntPtr.Zero; n = GetWindow(n, 2)) if (IsWindowVisible(n) && !list.Contains(n)) { bottom = false; break; }
-      if (bottom) continue;
-      SetWindowPos(h, (IntPtr)1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);  // HWND_BOTTOM; NOSIZE|NOMOVE|NOACTIVATE
+    for (int i = 0; i < order.Count && i < lastForeign; i++) {
+      if (!isOurs[i]) continue;
+      SetWindowPos(order[i], (IntPtr)1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);  // HWND_BOTTOM; NOSIZE|NOMOVE|NOACTIVATE
       moved++; }
     return moved;
   }
