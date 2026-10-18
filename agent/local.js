@@ -85,6 +85,7 @@ async function claudeTick() {
   if (Date.now() - lastClaude < mins * 60000) return;
   lastClaude = Date.now();
   const t = claude.totals(); if (!t) return;
+  claude.saveLocal(t);
   await fetch(`${APP}/api/claude`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t), signal: AbortSignal.timeout(5000) }).catch(() => {});
 }
 claudeTick(); setInterval(claudeTick, 15000);

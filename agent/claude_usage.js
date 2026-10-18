@@ -38,4 +38,19 @@ function totals() {
   return { ...t, sessions: sessions.size, models };
 }
 
-module.exports = { totals, DIR };
+// Local SQLite copy on the host (data/claude_usage.db, gitignored), written even while the dashboard is down.
+let ldb = null;
+function saveLocal(t) {
+  try {
+    if (!ldb) {
+      fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
+      const { DatabaseSync } = require('node:sqlite');
+      ldb = new DatabaseSync(path.join(ROOT, 'data', 'claude_usage.db'));
+      ldb.exec('CREATE TABLE IF NOT EXISTS claude_usage (ts REAL PRIMARY KEY, input REAL, output REAL, cache_read REAL, cache_create REAL, messages INTEGER, sessions INTEGER, models TEXT)');
+    }
+    ldb.prepare('INSERT OR REPLACE INTO claude_usage VALUES (?,?,?,?,?,?,?,?)')
+      .run(Date.now() / 1000, t.input, t.output, t.cache_read, t.cache_create, t.messages, t.sessions, JSON.stringify(t.models));
+  } catch (e) { console.log(`local sqlite save failed: ${e.message}`); ldb = null; }
+}
+
+module.exports = { totals, saveLocal, DIR };

@@ -38,7 +38,7 @@ Partly. These layers keep it running:
 
 ## Access log (which computer talked to the app)
 
-Every API request is logged to `/data/access.log` inside the container. That path is in the `status-data` volume, so it is never in this repo. It rotates at 1 MB with 5 backups.
+Every API request is logged to `/data/access.log` inside the container. That path is the repo's `data/` folder (bind-mounted, gitignored), so it is never committed. `data/` also holds `status.db` (computer + Claude samples) and `claude_usage.db` (a host-side copy of the Claude samples written by `agent/local.js`). It rotates at 1 MB with 5 backups.
 
 Each line is `time client-ip METHOD path status hostname-or-source`. The hostname comes from the POST body.
 
