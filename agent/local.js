@@ -1,9 +1,11 @@
-// Local chromium cleaner - separate from server.js (the remote browser), so restarting one never touches the other.
-// Lists the Playwright chromium processes, marks orphans (not descended from the live browser server) as dead,
-// counts DEAD_GRACE_S down to 0 and kills them. Reports to the dashboard. Does nothing destructive while the
-// browser server is down/restarting (its pid is unknown then, so nothing is judged dead).
+// Local-machine jobs in one process: runs/supervises the live metrics collector (live_collector.ps1) and the
+// chromium cleaner. Separate from server.js (the remote browser), so restarting one never touches the other.
+//
+// Cleaner: lists the Playwright chromium processes, marks orphans (not descended from the live browser server)
+// as dead, counts DEAD_GRACE_S down to 0 and kills them. Reports to the dashboard. Does nothing destructive while
+// the browser server is down/restarting (its pid is unknown then, so nothing is judged dead).
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const APP = 'http://localhost:8765';
 const BROWSERS = path.join(__dirname, '..', 'browsers').toLowerCase();
@@ -53,5 +55,14 @@ function scan() {
     } finally { busy = false; }
   });
 }
-log('chrome cleaner started');
+// ---- collector supervisor: restart live_collector.ps1 whenever it exits ----
+function startCollector() {
+  const c = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', path.join(__dirname, 'live_collector.ps1')],
+    { windowsHide: true, stdio: 'ignore' });
+  log(`collector started pid ${c.pid}`);
+  c.on('exit', code => { log(`collector exited (${code}); restarting in 5s`); setTimeout(startCollector, 5000); });
+}
+
+log('local jobs started');
+startCollector();
 scan(); setInterval(scan, EVERY_SEC * 1000);
