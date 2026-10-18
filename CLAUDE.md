@@ -17,6 +17,7 @@
 ## Rebuild after changes
 - Always rebuild/restart every job whose code was modified so it runs the up-to-date code: Docker app (`docker compose up -d --build`), `browser/server.js` (`browser/restart-server.ps1`), Windows collector/push agents (re-run their `scripts/register-local.ps1` for the local jobs).
 - Do this before the commit/push step and confirm each job is running.
+- `scripts/rebuild-all.ps1` is the single command that rebuilds/restarts EVERY service (`-SkipBrowser` leaves the remote browser running). When you add a new service, add its (re)build/restart command to the `$steps` list in that file in the same commit, so everything can always be rebuilt with one command.
 
 ## Machines
 - Only `DUSTINHO` (the dev machine) may change code/files in this folder. Every other machine is read-only: `git pull`, then update/restart all services (rebuild Docker app, `browser/restart-server.ps1`, `scripts/register-local.ps1`) — never edit or commit code there.

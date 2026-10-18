@@ -31,6 +31,10 @@ Windows agent (agent/*.ps1) --POST /api/live, /api/status--> Docker app (app/app
 
 With `browser_headless: false` the remote Chromium shows real windows. `agent/keep_bottom.ps1` (supervised by `agent/local.js`) pushes each one to the bottom of the z-order once, when it first appears (it checks every 250 ms), so a remote client opening a page never covers your current window. Pages keep running normally. A window may flash on top for up to ~250 ms, and keyboard focus can still move briefly.
 
+## Rebuild everything
+
+`powershell -ExecutionPolicy Bypass -File scriptsebuild-all.ps1 [-SkipBrowser]` rebuilds the Docker app and re-registers/restarts the browser service, local jobs and push agent. The dashboard's Rebuild button does the same selectively (only what changed).
+
 ## Always on?
 
 Partly. These layers keep it running:
