@@ -22,4 +22,10 @@ Register-ScheduledTask -TaskName 'ComputerStatusLocal' -Action $action -Trigger 
     -Principal $principal -Settings $settings -Force `
     -Description 'computer_status: local jobs (live metrics collector + chromium cleaner)' | Out-Null
 Write-Host "Scheduled task 'ComputerStatusLocal' registered (runs at logon of $User)."
+# Stop the previous instance (and its collector) so the new code actually runs
+Stop-ScheduledTask -TaskName 'ComputerStatusLocal' -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process |
+    Where-Object { ($_.CommandLine -like '*agent\local.js*' -or $_.CommandLine -like '*live_collector.ps1*') -and $_.ProcessId -ne $PID } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 2
 Start-ScheduledTask -TaskName 'ComputerStatusLocal'
