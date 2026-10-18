@@ -81,7 +81,7 @@ const fs = require('fs');
 const CONFIG = path.join(__dirname, '..', 'config', 'general_computer_settings.json');
 let lastClaude = 0;
 async function claudeTick() {
-  let mins = 5; try { mins = Number(JSON.parse(fs.readFileSync(CONFIG, 'utf8')).claude_sample_minutes) || 5; } catch {}
+  let mins = 1; try { mins = Number(JSON.parse(fs.readFileSync(CONFIG, 'utf8')).claude_sample_minutes) || 1; } catch {}
   if (Date.now() - lastClaude < mins * 60000) return;
   lastClaude = Date.now();
   const t = claude.totals(); if (!t) return;
