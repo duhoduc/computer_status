@@ -71,8 +71,17 @@ function startCollector() {
   c.on('exit', code => { log(`collector exited (${code}); restarting in 5s`); setTimeout(startCollector, 5000); });
 }
 
+// ---- keep remote-browser windows at the bottom of the z-order (see keep_bottom.ps1) ----
+function startKeepBottom() {
+  const c = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', path.join(__dirname, 'keep_bottom.ps1')],
+    { windowsHide: true, stdio: 'ignore' });
+  log(`keep_bottom started pid ${c.pid}`);
+  c.on('exit', code => { log(`keep_bottom exited (${code}); restarting in 5s`); setTimeout(startKeepBottom, 5000); });
+}
+
 log('local jobs started');
 startCollector();
+startKeepBottom();
 scan(); setInterval(scan, EVERY_SEC * 1000);
 
 // ---- Claude Code usage sampler: one sample every `claude_sample_minutes` (config), sent to the dashboard ----

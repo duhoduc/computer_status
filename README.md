@@ -27,6 +27,10 @@ Windows agent (agent/*.ps1) --POST /api/live, /api/status--> Docker app (app/app
 - One-time, as administrator: `scripts/allow-tailscale-admin.ps1` opens TCP 8765 and 8766 to `100.64.0.0/10` only (not the wider LAN or internet).
 - Ports are plain HTTP with no login: anyone on your tailnet can view the dashboard and press Rebuild. Use Tailscale ACLs if that is too open.
 
+## Remote browser windows stay in the background
+
+With `browser_headless: false` the remote Chromium shows real windows. `agent/keep_bottom.ps1` (supervised by `agent/local.js`) pushes them to the bottom of the z-order every 250 ms, so a remote client opening a page never covers your current window. Pages keep running normally. A window may flash on top for up to ~250 ms, and keyboard focus can still move briefly.
+
 ## Always on?
 
 Partly. These layers keep it running:
