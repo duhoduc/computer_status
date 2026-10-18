@@ -14,6 +14,7 @@ const EVERY_SEC = 5;
 const PS = "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,WorkingSetSize | ConvertTo-Json -Compress";
 
 const log = m => console.log(`${new Date().toISOString().replace('T', ' ').slice(0, 19)}  ${m}`);
+const failed = new Map();      // pid -> failed kill attempts
 const deadSince = new Map();   // pid -> first time seen dead
 let busy = false;
 
@@ -43,11 +44,17 @@ function scan() {
           status = 'dead';
           if (!deadSince.has(p.ProcessId)) deadSince.set(p.ProcessId, now);
           left = Math.max(0, DEAD_GRACE_S - Math.round((now - deadSince.get(p.ProcessId)) / 1000));
-          if (left === 0) { log(`killing dead chromium pid ${p.ProcessId}`); execFile('taskkill', ['/F', '/PID', String(p.ProcessId)], { windowsHide: true }, () => {}); }
+          if (left === 0) {
+            if ((failed.get(p.ProcessId) || 0) >= 3) status = 'stuck';   // already gone but a handle keeps the ghost alive: stop retrying
+            else {
+              log(`killing dead chromium pid ${p.ProcessId}`);
+              execFile('taskkill', ['/F', '/PID', String(p.ProcessId)], { windowsHide: true }, e => { if (e) failed.set(p.ProcessId, (failed.get(p.ProcessId) || 0) + 1); });
+            }
+          }
         }
         return { pid: p.ProcessId, name: p.Name, status, mem_mb: Math.round(p.WorkingSetSize / 1048576), counter: left };
       });
-      for (const k of deadSince.keys()) if (!seen.has(k)) deadSince.delete(k);
+      for (const k of deadSince.keys()) if (!seen.has(k)) { deadSince.delete(k); failed.delete(k); }
       await fetch(`${APP}/api/cleaner/heartbeat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chrome }), signal: AbortSignal.timeout(3000),

@@ -81,7 +81,7 @@
 .pt th,.pt td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--grid)}
 .pt td.n,.pt th.n{text-align:right;font-variant-numeric:tabular-nums}
 .pt .bar{display:block;height:4px;border-radius:2px;margin-top:3px}
-.st-running{color:#16a34a}.st-dead{color:var(--pow);font-weight:600}
+.st-running{color:#16a34a}.st-stuck{color:var(--temp);font-weight:600}.st-dead{color:var(--pow);font-weight:600}
 </style>
 <script>
 for(const b of document.querySelectorAll('#tabs button'))b.onclick=()=>{
@@ -104,7 +104,7 @@ async function procTick(){
   try{
     const d=await (await fetch('/api/live?n=1')).json(),s=d.latest;
     if(s){topTable('t-cpu',s.top_cpu||[],'cpu',v=>v.toFixed(1)+'%','--cpu');topTable('t-ram',s.top_ram||[],'mem_mb',v=>v>=1024?(v/1024).toFixed(2)+' GB':v+' MB','--ram')}
-    const b=await (await fetch('/api/browser',{cache:'no-store'})).json(),c=b.chrome||[],dead=c.filter(x=>x.status==='dead').length;
+    const b=await (await fetch('/api/browser',{cache:'no-store'})).json(),c=b.chrome||[],dead=c.filter(x=>x.status==='dead'||x.status==='stuck').length;
     document.getElementById('ch-sum').textContent=`${c.length} total · ${c.length-dead} running · ${dead} dead`;
     document.getElementById('t-chrome').innerHTML='<tr><th>PID</th><th>Status</th><th class="n">Counter (s to cleanup)</th><th class="n">RAM</th></tr>'+
       (c.length?c.map(x=>`<tr><td>${x.pid}</td><td class="st-${x.status}">${x.status}</td><td class="n">${x.counter==null?'-':x.counter}</td><td class="n">${x.mem_mb} MB</td></tr>`).join(''):'<tr><td colspan="4" class="stats">no chromium processes (or cleaner service down)</td></tr>');

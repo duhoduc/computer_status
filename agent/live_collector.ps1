@@ -12,7 +12,7 @@ $nvidia = [bool](Get-Command nvidia-smi -ErrorAction SilentlyContinue)
 $settingsFile = Join-Path $PSScriptRoot "..\config\general_computer_settings.json"
 $cpuIdleW = 25; $cpuMaxW = 120; $otherW = 40   # fallbacks; overridden by general_computer_settings.json
 $loop = 0
-$prevCpu = @{}; $prevT = [datetime]::UtcNow; $ncpu = [Environment]::ProcessorCount; $top = $null
+$prevCpu = @{}; $prevT = [datetime]::UtcNow; $ncpu = [Environment]::ProcessorCount; $top = $null; $ema = @{}   # per-name smoothed CPU% so the top-10 ranking doesn't flicker
 
 function Get-TopProcs {  # per-process-name CPU% (delta of CPU seconds) and RAM, top 10 each
   $now = [datetime]::UtcNow; $dt = [math]::Max(0.1, ($now - $script:prevT).TotalSeconds); $script:prevT = $now
@@ -26,8 +26,14 @@ function Get-TopProcs {  # per-process-name CPU% (delta of CPU seconds) and RAM,
     $r = $rows[$n]; $r.count++; $r.cpu += $d; $r.mem_mb += $p.WorkingSet64 / 1MB
   }
   $script:prevCpu = $cur
-  foreach ($r in $rows.Values) { $r.cpu = [math]::Round(100 * $r.cpu / $dt / $script:ncpu, 1); $r.mem_mb = [math]::Round($r.mem_mb) }
-  @{ cpu = @($rows.Values | Sort-Object { $_.cpu } -Descending | Select-Object -First 10)
+  foreach ($r in $rows.Values) {
+    $raw = 100 * $r.cpu / $dt / $script:ncpu
+    $prev = if ($script:ema.ContainsKey($r.name)) { $script:ema[$r.name] } else { $raw }
+    $script:ema[$r.name] = 0.6 * $prev + 0.4 * $raw      # EMA, alpha 0.4
+    $r.cpu = [math]::Round($script:ema[$r.name], 1); $r.mem_mb = [math]::Round($r.mem_mb)
+  }
+  foreach ($k in @($script:ema.Keys)) { if (-not $rows.ContainsKey($k)) { $script:ema.Remove($k) } }
+  @{ cpu = @($rows.Values | Sort-Object @{e={$_.cpu};Descending=$true},@{e={$_.mem_mb};Descending=$true} | Select-Object -First 10)
      ram = @($rows.Values | Sort-Object { $_.mem_mb } -Descending | Select-Object -First 10) }
 }
 
