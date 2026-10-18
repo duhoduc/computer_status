@@ -107,7 +107,7 @@ async function procTick(){
     const b=await (await fetch('/api/browser',{cache:'no-store'})).json(),c=b.chrome||[],dead=c.filter(x=>x.status==='dead').length;
     document.getElementById('ch-sum').textContent=`${c.length} total · ${c.length-dead} running · ${dead} dead`;
     document.getElementById('t-chrome').innerHTML='<tr><th>PID</th><th>Status</th><th class="n">Counter (s to cleanup)</th><th class="n">RAM</th></tr>'+
-      (c.length?c.map(x=>`<tr><td>${x.pid}</td><td class="st-${x.status}">${x.status}</td><td class="n">${x.counter==null?'-':x.counter}</td><td class="n">${x.mem_mb} MB</td></tr>`).join(''):'<tr><td colspan="4" class="stats">no chromium processes (browser service down?)</td></tr>');
+      (c.length?c.map(x=>`<tr><td>${x.pid}</td><td class="st-${x.status}">${x.status}</td><td class="n">${x.counter==null?'-':x.counter}</td><td class="n">${x.mem_mb} MB</td></tr>`).join(''):'<tr><td colspan="4" class="stats">no chromium processes (or cleaner service down)</td></tr>');
   }catch(e){}
 }
 procTick();setInterval(procTick,2000);

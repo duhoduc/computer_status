@@ -6,7 +6,8 @@ from urllib.parse import urlparse, parse_qs
 DB_PATH = os.environ.get("DB_PATH", "status.db")
 PORT = int(os.environ.get("PORT", "8765"))
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "general_computer_settings.json")
-BROWSER = {"ts": 0, "endpoint": None, "headless": None, "chrome": []}  # last heartbeat from the host's server.js
+BROWSER = {"ts": 0, "endpoint": None, "headless": None, "pid": None}
+CLEANER = {"ts": 0, "chrome": []}  # last heartbeat from the host-side chrome_cleaner.js  # last heartbeat from the host's server.js
 DEFAULTS = {"sample_interval_s": 30, "retention_days": 30, "browser_headless": False,
             "power_model": {"cpu_idle_w": 25, "cpu_max_w": 120, "other_w": 40}}
 LIMITS = {"sample_interval_s": (1, 3600), "retention_days": (1, 3650)}
@@ -253,7 +254,8 @@ class H(BaseHTTPRequestHandler):
             age = time.time() - BROWSER["ts"]
             return self.send(200, {"up": age < 20, "age_s": int(age) if BROWSER["ts"] else None, "endpoint": BROWSER["endpoint"],
                                    "running_headless": BROWSER["headless"], "wanted_headless": load_config()["browser_headless"],
-                                   "chrome": BROWSER["chrome"] if age < 20 else []})
+                                   "pid": BROWSER["pid"] if age < 20 else None,
+                                   "cleaner_up": time.time() - CLEANER["ts"] < 30, "chrome": CLEANER["chrome"] if time.time() - CLEANER["ts"] < 30 else []})
         if u.path == "/api/settings":
             return self.send(200, {"settings": load_config(), "db": db_stats(), "file": "general_computer_settings.json"})
         if u.path == "/api/samples":
@@ -273,10 +275,17 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, {"settings": update_config(json.loads(self.rfile.read(n)))})
             except Exception as e:
                 return self.send(400, {"error": str(e)})
+        if self.path == "/api/cleaner/heartbeat":
+            try:
+                b = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                CLEANER.update(ts=time.time(), chrome=b.get("chrome") or [])
+                return self.send(200, {"ok": True})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
         if self.path == "/api/browser/heartbeat":
             try:
                 b = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-                BROWSER.update(ts=time.time(), endpoint=b.get("endpoint"), headless=b.get("headless"), chrome=b.get("chrome") or [])
+                BROWSER.update(ts=time.time(), endpoint=b.get("endpoint"), headless=b.get("headless"), pid=b.get("pid"))
                 return self.send(200, {"ok": True})
             except Exception as e:
                 return self.send(400, {"error": str(e)})
@@ -296,7 +305,7 @@ class H(BaseHTTPRequestHandler):
     who = ""  # hostname/source reported in a POST body, for the access log
 
     def log_message(self, fmt, *a):
-        if self.path in ("/health", "/api/browser/heartbeat", "/api/browser"):  # skip polling noise
+        if self.path in ("/health", "/api/browser/heartbeat", "/api/cleaner/heartbeat", "/api/browser"):  # skip polling noise
             return
         try:
             ACCESS_LOG.info("%s %s %s %s %s", self.client_address[0], self.command, self.path, a[1] if len(a) > 1 else "-", self.who)

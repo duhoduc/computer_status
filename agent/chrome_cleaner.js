@@ -1,0 +1,57 @@
+// Local chromium cleaner - separate from server.js (the remote browser), so restarting one never touches the other.
+// Lists the Playwright chromium processes, marks orphans (not descended from the live browser server) as dead,
+// counts DEAD_GRACE_S down to 0 and kills them. Reports to the dashboard. Does nothing destructive while the
+// browser server is down/restarting (its pid is unknown then, so nothing is judged dead).
+const path = require('path');
+const { execFile } = require('child_process');
+
+const APP = 'http://localhost:8765';
+const BROWSERS = path.join(__dirname, '..', 'browsers').toLowerCase();
+const DEAD_GRACE_S = 60;
+const EVERY_SEC = 5;
+const PS = "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,WorkingSetSize | ConvertTo-Json -Compress";
+
+const log = m => console.log(`${new Date().toISOString().replace('T', ' ').slice(0, 19)}  ${m}`);
+const deadSince = new Map();   // pid -> first time seen dead
+let busy = false;
+
+async function rootPid() {
+  try {
+    const b = await (await fetch(`${APP}/api/browser`, { signal: AbortSignal.timeout(3000) })).json();
+    return b.up ? b.pid : null;
+  } catch { return null; }
+}
+
+function scan() {
+  if (busy) return; busy = true;
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PS], { maxBuffer: 64e6, windowsHide: true }, async (err, out) => {
+    try {
+      if (err) return;
+      let all; try { all = JSON.parse(out); } catch { return; }
+      const root = await rootPid();
+      const parent = new Map(all.map(p => [p.ProcessId, p.ParentProcessId]));
+      const isAlive = pid => { for (let i = 0, x = pid; x && i < 50; i++, x = parent.get(x)) if (x === root) return true; return false; };
+      const now = Date.now(), seen = new Set();
+      const chrome = all.filter(p => (p.ExecutablePath || '').toLowerCase().startsWith(BROWSERS)).map(p => {
+        seen.add(p.ProcessId);
+        let status = 'running', left = null;
+        if (!root) { status = 'unknown'; deadSince.delete(p.ProcessId); }   // browser server down: don't judge
+        else if (isAlive(p.ProcessId)) deadSince.delete(p.ProcessId);
+        else {
+          status = 'dead';
+          if (!deadSince.has(p.ProcessId)) deadSince.set(p.ProcessId, now);
+          left = Math.max(0, DEAD_GRACE_S - Math.round((now - deadSince.get(p.ProcessId)) / 1000));
+          if (left === 0) { log(`killing dead chromium pid ${p.ProcessId}`); execFile('taskkill', ['/F', '/PID', String(p.ProcessId)], { windowsHide: true }, () => {}); }
+        }
+        return { pid: p.ProcessId, name: p.Name, status, mem_mb: Math.round(p.WorkingSetSize / 1048576), counter: left };
+      });
+      for (const k of deadSince.keys()) if (!seen.has(k)) deadSince.delete(k);
+      await fetch(`${APP}/api/cleaner/heartbeat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chrome }), signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    } finally { busy = false; }
+  });
+}
+log('chrome cleaner started');
+scan(); setInterval(scan, EVERY_SEC * 1000);

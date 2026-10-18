@@ -14,8 +14,6 @@ const CDP_PORT = 9223;    // localhost-only debug port, used by the tab janitor 
 const JANITOR_IDLE_MIN = 15;     // close tabs with no navigation/network/console activity for this long
 const JANITOR_MAX_TABS = 20;     // hard cap: beyond this, the least recently active tabs are closed
 const JANITOR_EVERY_SEC = 60;    // sweep interval
-const DEAD_GRACE_S = 60;         // an orphaned Chromium process is killed after this countdown reaches 0
-const REAP_EVERY_SEC = 10;       // chrome process scan interval
 // ========================================================
 
 const path = require('path');
@@ -68,36 +66,10 @@ async function waitForTailscaleIp() {
     process.exit(1);
   });
 
-  // Chromium process reaper: lists our chromium processes; any not descended from the live server browser
-  // is "dead" (orphan) and gets a countdown; at 0 it is killed. Shown on the dashboard Processes tab.
-  const { execFile } = require('child_process');
-  const BROWSERS = path.join(__dirname, 'browsers').toLowerCase();
-  const deadSince = new Map();   // pid -> first time seen dead
-  let chrome = [];
-  const PS = "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,WorkingSetSize | ConvertTo-Json -Compress";
-  const scan = () => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PS], { maxBuffer: 64e6, windowsHide: true }, (err, out) => {
-    if (err) return;
-    let all; try { all = JSON.parse(out); } catch { return; }
-    const parent = new Map(all.map(p => [p.ProcessId, p.ParentProcessId]));
-    const root = server.process().pid;
-    const isAlive = pid => { for (let i = 0, x = pid; x && i < 50; i++, x = parent.get(x)) if (x === root) return true; return false; };
-    const now = Date.now(), seen = new Set();
-    chrome = all.filter(p => (p.ExecutablePath || '').toLowerCase().startsWith(BROWSERS)).map(p => {
-      const alive = isAlive(p.ProcessId); seen.add(p.ProcessId);
-      if (alive) deadSince.delete(p.ProcessId); else if (!deadSince.has(p.ProcessId)) deadSince.set(p.ProcessId, now);
-      const left = alive ? null : Math.max(0, DEAD_GRACE_S - Math.round((now - deadSince.get(p.ProcessId)) / 1000));
-      if (left === 0) { log(`reaper: killing dead chromium pid ${p.ProcessId}`); execFile('taskkill', ['/F', '/PID', String(p.ProcessId)], { windowsHide: true }, () => {}); }
-      return { pid: p.ProcessId, name: p.Name, status: alive ? 'running' : 'dead', mem_mb: Math.round(p.WorkingSetSize / 1048576), counter: left };
-    });
-    for (const k of deadSince.keys()) if (!seen.has(k)) deadSince.delete(k);
-  });
-  scan();
-  setInterval(scan, REAP_EVERY_SEC * 1000);
-
   // Heartbeat to the dashboard app (drives its browser LED).
   const beat = () => fetch(`${APP}/api/browser/heartbeat`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint: server.wsEndpoint(), headless: HEADLESS, chrome }),
+    body: JSON.stringify({ endpoint: server.wsEndpoint(), headless: HEADLESS, pid: server.process().pid }),
     signal: AbortSignal.timeout(3000),
   }).catch(() => {});
   beat();
